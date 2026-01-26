@@ -4,7 +4,7 @@ import RAPIER from '@dimforge/rapier2d-compat';
 
 export class Debris {
     private body: RAPIER.RigidBody;
-    private visual: Phaser.GameObjects.Arc;
+    private visual: Phaser.GameObjects.Sprite;
 
     constructor(scene: Phaser.Scene, x: number, y: number, radius: number = 5) {
         const rapierManager = RapierManager.getInstance();
@@ -25,7 +25,8 @@ export class Debris {
         rapierManager.world.createCollider(colliderDesc, this.body);
 
         // Visual
-        this.visual = scene.add.circle(x, y, radius, 0x888888);
+        this.visual = scene.add.sprite(x, y, 'debris');
+        this.visual.setDisplaySize(radius * 2, radius * 2);
     }
 
     update() {

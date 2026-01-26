@@ -10,10 +10,11 @@ import { Turret } from '../objects/Turret';
 import { GravitySystem } from '../logic/GravitySystem';
 import { TeamManager } from '../logic/TeamManager';
 import { AIManager } from '../logic/AIManager';
-import { ProjectileType } from '../objects/ProjectileTypes';
+import { ProjectileType, PROJECTILE_DATA } from '../objects/ProjectileTypes';
 import { UIManager } from '../ui/UIManager';
 import { InputManager } from '../input/InputManager';
 import { TrajectorySystem } from '../logic/TrajectorySystem';
+import { FXManager } from '../logic/FXManager';
 
 export class MainScene extends Phaser.Scene {
   public rapierManager: RapierManager;
@@ -57,32 +58,28 @@ export class MainScene extends Phaser.Scene {
     await this.rapierManager.init();
     
     // 2. Setup Renderer
+    // 2. Setup Renderer
     this.fleetRenderer = new FleetRenderer(this); // Pass 'this' as scene
     this.graphics = this.add.graphics();
     this.graphics.setDepth(1000);
     
+    // ...
+
+    this.uiManager = new UIManager(this);
+    this.uiManager.createWeaponSelectionUI();
+    this.uiManager.createDebugUI();
+    
     // 3. Init AI Physics (after Rapier is ready)
     this.aiManager.init();
 
+    // Generate all textures
+    this.generateTextures();
+    
+    // Init FXManager
+    FXManager.init(this);
+
     // 3. Create Debug Bodies (Visual Test)
     if (this.rapierManager.world) {
-        const RAPIER = await import('@dimforge/rapier2d-compat');
-        
-        // Spawn 100 ships
-        for (let i = 0; i < 100; i++) {
-            let bodyDesc = RAPIER.RigidBodyDesc.dynamic()
-                .setTranslation(Math.random() * 800, Math.random() * 600)
-                .setLinvel(Math.random() * 20 - 10, Math.random() * 20 - 10);
-            let rigidBody = this.rapierManager.world.createRigidBody(bodyDesc);
-            (rigidBody as any).userData = { type: 'ship' };
-            // Ship logic remains unchanged for now
-
-
-            // Give them a collider so they bounce? or just drift?
-            // For now just points moving
-            // let colliderDesc = RAPIER.ColliderDesc.ball(5.0);
-            // this.rapierManager.world.createCollider(colliderDesc, rigidBody);
-        }
 
         // Initialize Teams
         const redTeam = this.teamManager.addTeam({ id: 'red', name: 'Red Faction', color: 0xff0000 });
@@ -237,6 +234,14 @@ export class MainScene extends Phaser.Scene {
      this.inputManager = new InputManager(this);
      this.inputManager.handleInput();
      
+     // Handle Audio Context Resume
+     this.input.on('pointerdown', () => {
+         const soundManager = this.sound as Phaser.Sound.WebAudioSoundManager;
+         if (soundManager.context && soundManager.context.state === 'suspended') {
+             soundManager.context.resume();
+         }
+     });
+
      this.trajectorySystem = new TrajectorySystem(this);
   }
 
@@ -249,7 +254,7 @@ export class MainScene extends Phaser.Scene {
     if (shouldStep) {
         GravitySystem.applyGravity(this.projectiles, this.planets);
         this.rapierManager.step();
-        this.projectiles.forEach(p => p.update());
+        this.projectiles.forEach(p => p.update(this.planets));
     }
 
     if (this.turnManager.currentPhase === TurnPhase.PLANNING) {
@@ -267,10 +272,13 @@ export class MainScene extends Phaser.Scene {
     // List of pending destruction tasks
     const pendingDestruction: (() => void)[] = [];
 
+    // Update FX
+    FXManager.getInstance().update(delta);
+
     // Handle Collisions
     this.rapierManager.drainCollisionEvents((handle1, handle2, started) => {
         if (!started) return;
-        console.log(`Collision Detected: ${handle1} <-> ${handle2}`);
+        // console.log(`Collision Detected: ${handle1} <-> ${handle2}`);
 
         // Find bodies by handle
         // Rapier events return collider handles
@@ -293,7 +301,7 @@ export class MainScene extends Phaser.Scene {
         const data1 = (body1 as any).userData;
         const data2 = (body2 as any).userData;
         
-        console.log("Collision userData:", data1, data2);
+        // console.log("Collision userData:", data1, data2);
 
         // Check Collision Types
         
@@ -380,27 +388,28 @@ export class MainScene extends Phaser.Scene {
       if (projectileVisual) {
           const team = this.teamManager.getTeam(projectileVisual.teamId || '');
           const color = team ? team.color : 0xffffff;
-          this.createExplosion(projectileVisual.x, projectileVisual.y, color);
           
+          // Use FX Manager for visual explosion
+          FXManager.getInstance().createExplosion(projectileVisual.x, projectileVisual.y, color);
+          
+          // Check if we hit a planet
+          const hitPlanet = this.planets.find(p => p.id === (projectileBody?.userData?.parent as Planet)?.id) || 
+                            this.planets.find(p => Phaser.Math.Distance.Between(projectileVisual.x, projectileVisual.y, p.position.x, p.position.y) < p.radiusValue + 20); // Fallback
+
+          if (hitPlanet) {
+              const stats = PROJECTILE_DATA[projectileVisual.projectileType];
+              const radius = stats ? stats.explosionRadius : 15;
+              
+              if (radius > 0) {
+                 hitPlanet.takeDamage(projectileVisual.x, projectileVisual.y, radius);
+              }
+          }
+
           // Colonizer Effect
-          if (projectileVisual.projectileType === ProjectileType.COLONIZER) {
-              // Find the closest planet to the impact point
-              let closestPlanet: Planet | null = null;
-              let minDist = Infinity;
-              
-              for (const planet of this.planets) {
-                  const dist = Phaser.Math.Distance.Between(projectileVisual.x, projectileVisual.y, planet.position.x, planet.position.y);
-                  if (dist < minDist) {
-                      minDist = dist;
-                      closestPlanet = planet;
-                  }
-              }
-              
-              if (closestPlanet) {
-                  // Calculate angle from planet center to impact point
-                  const angle = Math.atan2(projectileVisual.y - closestPlanet.position.y, projectileVisual.x - closestPlanet.position.x);
-                  closestPlanet.addTurretAtAngle(angle, projectileVisual.teamId);
-              }
+          if (projectileVisual.projectileType === ProjectileType.COLONIZER && hitPlanet) {
+              // Calculate angle from planet center to impact point
+              const angle = Math.atan2(projectileVisual.y - hitPlanet.position.y, projectileVisual.x - hitPlanet.position.x);
+              hitPlanet.addTurretAtAngle(angle, projectileVisual.teamId);
           }
 
           projectileVisual.destroy();
@@ -429,12 +438,17 @@ export class MainScene extends Phaser.Scene {
   }
   
   private createExplosion(x: number, y: number, color: number, radius: number = 15) {
-      const circle = this.add.circle(x, y, 5, color);
-      circle.setDepth(2000); // Top of everything
+      // Visual Explosion (Sprite)
+      const circle = this.add.image(x, y, 'particle');
+      circle.setTint(color);
+      circle.setDepth(2000);
       
+      const targetScale = radius / 4; // Base 8x8 -> radius 4. 
+      circle.setScale(0.1);
+
       this.tweens.add({
           targets: circle,
-          radius: radius,
+          scale: targetScale,
           alpha: 0,
           duration: 300,
           onComplete: () => circle.destroy()
@@ -476,4 +490,71 @@ export class MainScene extends Phaser.Scene {
 
 
 
+
+  private generateTextures() {
+      // 1. Projectile (16x16 Yellow Circle)
+      if (!this.textures.exists('projectile')) {
+          const g = this.make.graphics({ x: 0, y: 0 });
+          g.fillStyle(0xffff00);
+          g.fillCircle(8, 8, 5);
+          g.generateTexture('projectile', 16, 16);
+          g.destroy();
+      }
+
+      // 2. Ship (32x32 Green Triangle)
+      if (!this.textures.exists('ship')) {
+          const g = this.make.graphics({ x: 0, y: 0 });
+          g.lineStyle(2, 0x00ff00);
+          g.fillStyle(0x000000);
+          
+          g.beginPath();
+          g.moveTo(16, 6);   // Top (shifted relative to center)
+          g.lineTo(24, 26);  // Bottom Right
+          g.lineTo(16, 22);  // Bottom Center (notch)
+          g.lineTo(8, 26);   // Bottom Left
+          g.closePath();
+          
+          g.fillPath();
+          g.strokePath();
+          
+          g.generateTexture('ship', 32, 32);
+          g.destroy();
+      }
+
+      // 3. Turret Base (32x32 White Box)
+      if (!this.textures.exists('turret_base')) {
+          const g = this.make.graphics({ x: 0, y: 0 });
+          g.fillStyle(0xffffff);
+          g.fillRect(6, 6, 20, 20);
+          g.generateTexture('turret_base', 32, 32);
+          g.destroy();
+      }
+
+      // 4. Debris (16x16 Grey Circle)
+      if (!this.textures.exists('debris')) {
+          const g = this.make.graphics({ x: 0, y: 0 });
+          g.fillStyle(0x888888);
+          g.fillCircle(8, 8, 5);
+          g.generateTexture('debris', 16, 16);
+          g.destroy();
+      }
+
+      // 5. Particle (8x8 White Circle)
+      if (!this.textures.exists('particle')) {
+          const g = this.make.graphics({ x: 0, y: 0 });
+          g.fillStyle(0xffffff);
+          g.fillCircle(4, 4, 3);
+          g.generateTexture('particle', 8, 8);
+          g.destroy();
+      }
+
+      // 6. 1x1 White Pixel
+      if (!this.textures.exists('white_1x1')) {
+          const g = this.make.graphics({ x: 0, y: 0 });
+          g.fillStyle(0xffffff);
+          g.fillRect(0, 0, 1, 1);
+          g.generateTexture('white_1x1', 1, 1);
+          g.destroy();
+      }
+  }
 }

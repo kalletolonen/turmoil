@@ -12,25 +12,6 @@ export class FleetRenderer {
   }
 
   private createMesh() {
-    // Create a simple triangle texture for the ships if it doesn't exist
-    if (!this.scene.textures.exists('ship')) {
-      const graphics = this.scene.make.graphics({ x: 0, y: 0 }); // Removed invalid 'add: false'
-      graphics.lineStyle(2, 0x00ff00);
-      graphics.fillStyle(0x000000);
-      graphics.beginPath();
-      // Triangle shape
-      graphics.moveTo(0, -10);
-      graphics.lineTo(8, 10);
-      graphics.lineTo(0, 6);
-      graphics.lineTo(-8, 10);
-      graphics.closePath();
-      graphics.fillPath();
-      graphics.strokePath();
-      graphics.generateTexture('ship', 20, 24);
-    }
-
-    // Initialize Mesh with the generated texture
-    // 'triangs' or 'quads' mostly depends on what we want. Quads are easier for sprites.
     this.mesh = this.scene.add.mesh(0, 0, 'ship');
     // Important: Disable culling logic if ships can be anywhere, or manage it manually.
     // Ideally, we want to perform 'Instanced Rendering' if Phaser supports it easily via `add.mesh`

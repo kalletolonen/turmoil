@@ -26,12 +26,9 @@ export class Projectile extends Phaser.GameObjects.Sprite {
         
         // If no texture is loaded, we can just use a shape visibly or rely on the scene to have a texture.
         // For safety, let's create a texture if it doesn't exist or just use a circle.
-        if (!scene.textures.exists('projectile')) {
-            const graphics = scene.make.graphics({ x: 0, y: 0 });
-            graphics.fillStyle(0xffff00);
-            graphics.fillCircle(5, 5, 5);
-            graphics.generateTexture('projectile', 10, 10);
-        }
+        // Texture is expected to be created by MainScene
+        // if (!scene.textures.exists('projectile')) { ... }
+
         this.setTexture('projectile');
         
         scene.add.existing(this);
@@ -66,12 +63,104 @@ export class Projectile extends Phaser.GameObjects.Sprite {
         this.world.createCollider(colliderDesc, this.bodyId);
     }
 
-    update() {
+    update(planets: import('./Planet').Planet[] = []) {
         if (!this.bodyId.isValid()) return;
         
         const translation = this.bodyId.translation();
         this.setPosition(translation.x, translation.y);
         
+        // Colonizer Landing Logic
+        // Colonizer Landing Logic
+        if (this.projectileType === ProjectileType.COLONIZER && planets.length > 0) {
+            // Find nearest planet
+            let nearest: import('./Planet').Planet | null = null;
+            let minDist = Infinity;
+            
+            for (const p of planets) {
+                const dist = Phaser.Math.Distance.Between(translation.x, translation.y, p.position.x, p.position.y);
+                const surfaceDist = dist - p.radiusValue;
+                if (surfaceDist < minDist) {
+                    minDist = surfaceDist;
+                    nearest = p;
+                }
+            }
+
+            // Smart Landing System
+            if (nearest) {
+                const vel = this.bodyId.linvel();
+                const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
+                const moveAngle = Math.atan2(vel.y, vel.x);
+
+                // 1. Calculate Closest Point of Approach (CPA) to see if we are on a collision course
+                // Vector to planet center
+                const toPlanetX = nearest.position.x - translation.x;
+                const toPlanetY = nearest.position.y - translation.y;
+                
+                // Project 'toPlanet' onto velocity direction
+                // Unit velocity
+                const vx = vel.x / speed;
+                const vy = vel.y / speed;
+                
+                // Dot product: length of projection
+                const dot = toPlanetX * vx + toPlanetY * vy;
+                
+                // Closest point on trajectory line
+                const closestX = translation.x + vx * dot;
+                const closestY = translation.y + vy * dot;
+                
+                // Distance from planet center to this closest point
+                const distToTrajectory = Phaser.Math.Distance.Between(closestX, closestY, nearest.position.x, nearest.position.y);
+                
+                // Are we colliding? (Trajectory passes within radius)
+                // We add a small buffer (e.g. 10px) to be sure
+                const isCollisionCourse = distToTrajectory < (nearest.radiusValue + 10) && dot > 0; // dot > 0 means planet is in front, not behind
+
+                // 2. Levitation / Soft Landing (< 15px)
+                if (isCollisionCourse && minDist < 15) {
+                    // Anti-gravity levitation to prevent smashing
+                    // Gravity is approx 10-20? We want to counteract it plus slow down.
+                    const hoverForce = 0.8 * this.bodyId.mass();
+                    
+                    // Apply force AWAY from planet center
+                    const angleFromPlanet = Math.atan2(translation.y - nearest.position.y, translation.x - nearest.position.x);
+                    const hx = Math.cos(angleFromPlanet) * hoverForce;
+                    const hy = Math.sin(angleFromPlanet) * hoverForce;
+                    
+                    this.bodyId.applyImpulse({ x: hx, y: hy }, true);
+                    
+                    // Also damp velocity if too fast
+                    if (speed > 5) {
+                         const dampX = -vel.x * 0.1 * this.bodyId.mass();
+                         const dampY = -vel.y * 0.1 * this.bodyId.mass();
+                         this.bodyId.applyImpulse({ x: dampX, y: dampY }, true);
+                    }
+                }
+                // 3. Suicide Burn (< 60px)
+                else if (isCollisionCourse && minDist < 60) {
+                     // Only brake if going fast
+                     const targetSpeed = (minDist / 60) * 30 + 5; // Scale speed down
+                     
+                     if (speed > targetSpeed) {
+                         // Retro-rockets!
+                         const brakeForce = 2.0 * this.bodyId.mass(); // Strong braking
+                         const brakeX = -vx * brakeForce;
+                         const brakeY = -vy * brakeForce;
+                         
+                         this.bodyId.applyImpulse({ x: brakeX, y: brakeY }, true);
+                         
+                         // Visuals (Exhaust forward)
+                         import('../logic/FXManager').then(({ FXManager }) => {
+                              const offset = 8;
+                              const emitX = translation.x + Math.cos(moveAngle) * offset;
+                              const emitY = translation.y + Math.sin(moveAngle) * offset;
+                              FXManager.getInstance().createThrustEffect(emitX, emitY, moveAngle + Math.PI);
+                         });
+                     }
+                }
+                // Else: Slingshot! Do nothing.
+            }
+        }
+
         // Cleanup if out of bounds (simple check)
         // if (translation.x < -100 || translation.x > 2000 || translation.y < -100 || translation.y > 2000) {
         //    this.destroy();

@@ -27,7 +27,7 @@ export class AIManager {
         // Sync physics world for accurate simulation
         this.physicsSimulator.syncPlanets(planets);
 
-        console.log(`AI (${aiTeam.name}) thinking...`);
+        // console.log(`AI (${aiTeam.name}) thinking...`);
 
         // 1. Identify Potential Targets
         const potentialTargets: { pos: {x: number, y: number}, radius: number, priority: number }[] = [];
@@ -45,14 +45,14 @@ export class AIManager {
         });
 
         if (potentialTargets.length === 0) {
-            console.log("AI: No targets found");
+            // console.log("AI: No targets found");
             return;
         }
 
         // Sort by priority (descending) + some random shuffle to avoid predictability
         potentialTargets.sort((a, b) => (b.priority + Math.random() * 5) - (a.priority + Math.random() * 5));
 
-        console.log(`AI: Found ${potentialTargets.length} targets. Processing per turret...`);
+        // console.log(`AI: Found ${potentialTargets.length} targets. Processing per turret...`);
 
         // 2. Iterate each AI Turret
         aiTeam.planets.forEach(myPlanet => {
@@ -99,17 +99,17 @@ export class AIManager {
                         );
                         
                         if (safetyCheck.hitFriendly) {
-                            console.log(`[AI] Turret ${myTurret.id.substring(0,4)} ABORT: Noisy shot would hit friendly!`);
+                            // console.log(`[AI] Turret ${myTurret.id.substring(0,4)} ABORT: Noisy shot would hit friendly!`);
                             continue; // Try next attempt/target
                         }
 
-                        console.log(`[AI] Turret ${myTurret.id.substring(0,4)} firing at target distance ${Math.floor(solution.speed)}.`);
-                        console.log(`     Type: ${myTurret.projectileType}, AP: ${myTurret.actionPoints}, Target Priority: ${target.priority}`);
+                        // console.log(`[AI] Turret ${myTurret.id.substring(0,4)} firing at target distance ${Math.floor(solution.speed)}.`);
+                        // console.log(`     Type: ${myTurret.projectileType}, AP: ${myTurret.actionPoints}, Target Priority: ${target.priority}`);
 
                         myTurret.setArmed(true, { x: vx, y: vy });
                         break; // Move to next turret
                     } else {
-                        console.log(`[AI] Turret ${myTurret.id.substring(0,4)} - No solution for attempt ${i+1}`);
+                        // console.log(`[AI] Turret ${myTurret.id.substring(0,4)} - No solution for attempt ${i+1}`);
                     }
                 }
             });

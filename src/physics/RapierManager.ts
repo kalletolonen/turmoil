@@ -28,7 +28,7 @@ export class RapierManager {
     this.world = new RAPIER.World(RapierManager.GRAVITY);
     this.eventQueue = new RAPIER.EventQueue(true);
     this.isInitialized = true;
-    console.log('Rapier Physics Initialized');
+    // console.log('Rapier Physics Initialized');
   }
 
   /**

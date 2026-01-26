@@ -20,7 +20,7 @@ export class TurnManager {
     this.currentPhase = TurnPhase.PLANNING;
     this.executionTimer = 0;
     if (this.onPhaseChange) this.onPhaseChange(this.currentPhase);
-    console.log('Turn Phase: PLANNING');
+    // console.log('Turn Phase: PLANNING');
   }
 
   public commitTurn() {
@@ -28,7 +28,7 @@ export class TurnManager {
       this.currentPhase = TurnPhase.EXECUTION;
       this.executionTimer = 0;
       if (this.onPhaseChange) this.onPhaseChange(this.currentPhase);
-      console.log('Turn Phase: EXECUTION');
+      // console.log('Turn Phase: EXECUTION');
     }
   }
 
@@ -50,7 +50,7 @@ export class TurnManager {
   private finishExecution() {
     this.currentPhase = TurnPhase.RESOLUTION;
     if (this.onPhaseChange) this.onPhaseChange(this.currentPhase);
-    console.log('Turn Phase: RESOLUTION');
+    // console.log('Turn Phase: RESOLUTION');
     
     // Auto-transition to Planning for now, or wait for UI?
     // Let's auto-transition after a brief moment or immediately?

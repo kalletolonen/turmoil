@@ -1,3 +1,13 @@
+
+// Debug: Intercept warnings to trace their source
+const originalWarn = console.warn;
+console.warn = (...args) => {
+    if (args.some(arg => typeof arg === 'string' && (arg.includes('WebGL') || arg.includes('texImage')))) {
+        console.trace('Tracing WebGL Warning:', ...args);
+    }
+    originalWarn(...args);
+};
+
 import { MainScene } from './scenes/MainScene';
 
 const config: Phaser.Types.Core.GameConfig = {

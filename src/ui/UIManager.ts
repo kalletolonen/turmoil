@@ -22,8 +22,11 @@ export class UIManager {
         this.weaponUIContainer.setScrollFactor(0);
         this.weaponUIContainer.setDepth(2000);
         
-        // Background
-        const bg = this.scene.add.rectangle(width/2, height/2, width, height, 0x222222, 0.9);
+        // Background (Sprite)
+        const bg = this.scene.add.image(width/2, height/2, 'white_1x1');
+        bg.setDisplaySize(width, height);
+        bg.setTint(0x222222);
+        bg.setAlpha(0.9);
         this.weaponUIContainer.add(bg);
         
         const types = [ProjectileType.BASIC, ProjectileType.GIGA_BLASTER, ProjectileType.COLONIZER, ProjectileType.RADAR];
@@ -37,7 +40,9 @@ export class UIManager {
             const boxY = height / 2;
             
             // Button Background
-            const button = this.scene.add.rectangle(boxX, boxY, 140, 100, 0x444444);
+            const button = this.scene.add.image(boxX, boxY, 'white_1x1');
+            button.setDisplaySize(140, 100);
+            button.setTint(0x444444);
             button.setInteractive({ useHandCursor: true });
             button.setName(`btn_${type}`); // Identify for update
             
@@ -51,7 +56,9 @@ export class UIManager {
             this.weaponUIContainer?.add(button);
             
             // Icon/Color
-            const icon = this.scene.add.circle(boxX, boxY - 20, 10, stats.color);
+            const icon = this.scene.add.image(boxX, boxY - 20, 'particle');
+            icon.setTint(stats.color);
+            icon.setDisplaySize(20, 20); // Radius 10 -> diam 20
             this.weaponUIContainer?.add(icon);
             
             // Text
@@ -85,16 +92,18 @@ export class UIManager {
         const types = [ProjectileType.BASIC, ProjectileType.GIGA_BLASTER, ProjectileType.COLONIZER, ProjectileType.RADAR];
         
         types.forEach(type => {
-            const button = this.weaponUIContainer?.getByName(`btn_${type}`) as Phaser.GameObjects.Rectangle;
+            const button = this.weaponUIContainer?.getByName(`btn_${type}`) as Phaser.GameObjects.Image;
             if (button) {
                 const stats = PROJECTILE_DATA[type];
                 const isSelected = this.scene.selectedTurret?.projectileType === type;
                 
                 // Highlight selection
                 if (isSelected) {
-                     button.setStrokeStyle(3, 0x4444ff); // Blue selection
+                     // button.setStrokeStyle(3, 0x4444ff); // Blue selection (Image doesn't support stroke)
+                     // Use Tint to show selection 
+                     button.setTint(0x4444ff);
                 } else {
-                     button.setStrokeStyle(0);
+                     button.setTint(0x444444);
                 }
                 
                 // Check affordability
@@ -122,7 +131,8 @@ export class UIManager {
                     button.setInteractive();
                 } else {
                     button.disableInteractive();
-                    button.setStrokeStyle(2, 0xff0000); // Red stroke for disabled
+                    button.setTint(0x550000); // Reddish for disabled
+                    // button.setStrokeStyle(2, 0xff0000); // Red stroke for disabled (unsupported)
                 }
             }
         });
@@ -183,7 +193,11 @@ export class UIManager {
         container.setScrollFactor(0);
         container.setDepth(2000); // Above other UI?
 
-        const bg = this.scene.add.rectangle(0, 0, 150, 40, 0x000000, 0.5).setOrigin(0);
+        const bg = this.scene.add.image(0, 0, 'white_1x1');
+        bg.setDisplaySize(150, 40);
+        bg.setTint(0x000000);
+        bg.setAlpha(0.5);
+        bg.setOrigin(0);
         container.add(bg);
 
         const text = this.scene.add.text(10, 10, 'Toggle AI Traj (OFF)', { fontSize: '12px', color: '#ffffff' });
@@ -197,7 +211,11 @@ export class UIManager {
         });
 
         // Max AP Toggle
-        const maxApBg = this.scene.add.rectangle(0, 50, 150, 40, 0x000000, 0.5).setOrigin(0);
+        const maxApBg = this.scene.add.image(0, 50, 'white_1x1');
+        maxApBg.setDisplaySize(150, 40);
+        maxApBg.setTint(0x000000);
+        maxApBg.setAlpha(0.5);
+        maxApBg.setOrigin(0);
         container.add(maxApBg);
         
         const maxApText = this.scene.add.text(10, 60, 'Max AP (Selected)', { fontSize: '12px', color: '#ffffff' });

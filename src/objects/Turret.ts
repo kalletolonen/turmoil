@@ -5,7 +5,7 @@ import { ProjectileType } from './ProjectileTypes';
 
 export class Turret {
     private body: RAPIER.RigidBody;
-    public visual: Phaser.GameObjects.Rectangle;
+    public visual: Phaser.GameObjects.Sprite;
 
     public armed: boolean = false;
     public readonly id: string = Phaser.Utils.String.UUID();
@@ -60,13 +60,21 @@ export class Turret {
         colliderDesc.setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
         rapierManager.world.createCollider(colliderDesc, this.body);
 
-        // Visual: Rectangle
+        // Visual: Sprite
         let color = 0xff0000;
         if (this.teamId === 'red') color = 0xff0000;
         if (this.teamId === 'green') color = 0x00ff00;
         
-        this.visual = scene.add.rectangle(x, y, width, height, color);
+        this.visual = scene.add.sprite(x, y, 'turret_base');
+        this.visual.setTint(color);
         this.visual.setRotation(angle);
+        
+        // Scale to match width/height if needed, but texture is 32x32.
+        // Turrets are passed width/height args (usually 10x10 or 20x20).
+        // Let's scale it to fit.
+        const scaleX = width / 32;
+        const scaleY = height / 32;
+        this.visual.setScale(scaleX, scaleY);
         
         // Health Bar
         this.healthBar = scene.add.graphics();
@@ -85,7 +93,7 @@ export class Turret {
         this.armed = value;
         if (this.armed && vector) {
             this.aimVector = vector;
-            this.visual.setFillStyle(0xffff00); // Yellow when armed
+            this.visual.setTint(0xffff00); // Yellow when armed
         } else {
             this.aimVector = null;
             // Restore team color
@@ -94,7 +102,7 @@ export class Turret {
             if (this.teamId === 'green') color = 0x00ff00;
             if (!this.teamId) color = 0xaaaaaa; // Neutral
 
-            this.visual.setFillStyle(color); // Revert to team color
+            this.visual.setTint(color); // Revert to team color
             this.armed = false;
         }
     }
