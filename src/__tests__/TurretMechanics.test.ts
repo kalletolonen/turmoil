@@ -8,11 +8,23 @@ vi.mock('../physics/RapierManager', () => ({
                 createRigidBody: vi.fn(() => ({
                     userData: {},
                     translation: () => ({ x: 0, y: 0 }),
-                    rotation: () => 0
+                    rotation: () => 0,
+                    numColliders: vi.fn(() => 0),
+                    collider: vi.fn(() => ({}))
                 })),
-                createCollider: vi.fn()
+                createCollider: vi.fn(),
+                removeCollider: vi.fn()
             }
         }))
+    }
+}));
+
+vi.mock('../config', () => ({
+    GameConfig: {
+        DEBUG_INFINITE_AP: false,
+        RED_FACTION_MAX_AP: false,
+        TURRET_FRICTION: 2.0,
+        TURRET_DAMPING: 0.5
     }
 }));
 
@@ -28,6 +40,15 @@ vi.mock('phaser', () => {
         constructor() {
             this.add = {
                 text: vi.fn().mockReturnThis(),
+                sprite: vi.fn(() => ({
+                    setTint: vi.fn().mockReturnThis(),
+                    setRotation: vi.fn().mockReturnThis(),
+                    setScale: vi.fn().mockReturnThis(),
+                    setInteractive: vi.fn().mockReturnThis(),
+                    destroy: vi.fn(),
+                    getBounds: vi.fn(() => ({ contains: () => false })),
+                    setVisible: vi.fn()
+                })),
                 circle: vi.fn(() => ({
                     setStrokeStyle: vi.fn().mockReturnThis(),
                     setPosition: vi.fn().mockReturnThis(),
@@ -59,7 +80,8 @@ vi.mock('phaser', () => {
                     beginPath: vi.fn(),
                     moveTo: vi.fn(),
                     lineTo: vi.fn(),
-                    strokePath: vi.fn()
+                    strokePath: vi.fn(),
+                    fillPoints: vi.fn()
                 }))
             };
             this.input = {
@@ -103,7 +125,8 @@ vi.mock('@dimforge/rapier2d-compat', () => {
             },
             ColliderDesc: {
                 cuboid: vi.fn(() => ({ setActiveEvents: vi.fn() })),
-                ball: vi.fn()
+                ball: vi.fn(),
+                polyline: vi.fn(() => ({}))
             },
             ActiveEvents: { COLLISION_EVENTS: 0 }
         },

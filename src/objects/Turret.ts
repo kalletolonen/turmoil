@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { RapierManager } from '../physics/RapierManager';
 import RAPIER from '@dimforge/rapier2d-compat';
 import { ProjectileType } from './ProjectileTypes';
+import { GameConfig } from '../config';
 
 export class Turret {
     private body: RAPIER.RigidBody;
@@ -123,12 +124,22 @@ export class Turret {
     }
     
     public consumeActionPoints(amount: number): boolean {
+        // Red Faction Max AP config or Debug Infinite AP bypass consumption
+        if (GameConfig.DEBUG_INFINITE_AP || (GameConfig.RED_FACTION_MAX_AP && this.teamId === 'red')) {
+            return true;
+        }
+
         if (this.actionPoints >= amount) {
             this.actionPoints -= amount;
             this.updateHealthBar();
             return true;
         }
         return false;
+    }
+
+    public setMaxActionPoints() {
+        this.actionPoints = this.maxActionPoints;
+        this.updateHealthBar();
     }
     
     public updateHealthBar() {

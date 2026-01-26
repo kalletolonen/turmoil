@@ -15,6 +15,7 @@ import { UIManager } from '../ui/UIManager';
 import { InputManager } from '../input/InputManager';
 import { TrajectorySystem } from '../logic/TrajectorySystem';
 import { FXManager } from '../logic/FXManager';
+import { GameConfig } from '../config';
 
 export class MainScene extends Phaser.Scene {
   public rapierManager: RapierManager;
@@ -180,16 +181,7 @@ export class MainScene extends Phaser.Scene {
             this.graphics.clear();
 
             // AP Accumulation Phase
-            this.planets.forEach(planet => {
-                const controllerId = planet.getControllerTeamId();
-                planet.turretsList.forEach(turret => {
-                    let apGain = 1;
-                    if (controllerId && turret.teamId === controllerId) {
-                        apGain = 2;
-                    }
-                    turret.addActionPoints(apGain);
-                });
-            });
+            this.applyAPAccumulation();
 
             // TRIGGER AI
             // We give it a slight delay so it doesn't happen INSTANTLY after resolution, 
@@ -215,7 +207,7 @@ export class MainScene extends Phaser.Scene {
      if (this.turnManager.currentPhase === TurnPhase.PLANNING) {
           // Re-run the planning setup manually
           this.teamManager.resetResources();
-          // this.updateTeamUI();
+          this.applyAPAccumulation();
           
           const teams = this.teamManager.getTeams();
           const aiTeams = teams.filter(t => t.isAI);
@@ -556,5 +548,23 @@ export class MainScene extends Phaser.Scene {
           g.generateTexture('white_1x1', 1, 1);
           g.destroy();
       }
+  }
+
+  private applyAPAccumulation() {
+      this.planets.forEach(p => {
+          const controllerId = p.getControllerTeamId();
+          p.turretsList.forEach(t => {
+              let apGain = 1;
+              if (controllerId && t.teamId === controllerId) {
+                  apGain = 2;
+              }
+              t.addActionPoints(apGain);
+
+              // If Red Faction Max AP config is enabled, max it out
+              if (GameConfig.RED_FACTION_MAX_AP && t.teamId === 'red') {
+                  t.setMaxActionPoints();
+              }
+          });
+      });
   }
 }
