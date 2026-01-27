@@ -5,12 +5,14 @@ vi.mock('../physics/RapierManager', () => ({
     RapierManager: {
         getInstance: vi.fn(() => ({
             world: {
-                createRigidBody: vi.fn(() => ({
+                createRigidBody: vi.fn((desc) => ({
                     userData: {},
-                    translation: () => ({ x: 0, y: 0 }),
+                    translation: () => desc._translation || { x: 0, y: 0 },
                     rotation: () => 0,
                     numColliders: vi.fn(() => 0),
-                    collider: vi.fn(() => ({}))
+                    collider: vi.fn(() => ({})),
+                    isValid: () => true,
+                    mass: () => 1
                 })),
                 createCollider: vi.fn(),
                 removeCollider: vi.fn()
@@ -25,6 +27,18 @@ vi.mock('../config', () => ({
         RED_FACTION_MAX_AP: false,
         TURRET_FRICTION: 2.0,
         TURRET_DAMPING: 0.5
+    }
+}));
+
+vi.mock('../logic/FXManager', () => ({
+    FXManager: {
+        getInstance: vi.fn(() => ({
+            createExplosion: vi.fn(),
+            createDebrisBurst: vi.fn(),
+            update: vi.fn(),
+            createThrustEffect: vi.fn()
+        })),
+        init: vi.fn()
     }
 }));
 
@@ -114,28 +128,39 @@ vi.mock('phaser', () => {
 
 // Mock Rapier Compat
 vi.mock('@dimforge/rapier2d-compat', () => {
-    const rigidBodyDescMock = {
-        setTranslation: vi.fn().mockReturnThis(),
-        setRotation: vi.fn().mockReturnThis()
-    };
+    class MockDesc {
+        _translation = { x: 0, y: 0 };
+        setTranslation(x, y) { this._translation = { x, y }; return this; }
+        setRotation(r) { return this; }
+        setLinvel(x, y) { return this; }
+        setCcdEnabled(e) { return this; }
+        setActiveEvents(e) { return this; }
+        setRestitution(r) { return this; }
+        setFriction(f) { return this; }
+        setDensity(d) { return this; }
+    }
+
     return {
         default: {
             RigidBodyDesc: {
-                fixed: vi.fn(() => rigidBodyDescMock)
+                fixed: vi.fn(() => new MockDesc()),
+                dynamic: vi.fn(() => new MockDesc())
             },
             ColliderDesc: {
-                cuboid: vi.fn(() => ({ setActiveEvents: vi.fn() })),
-                ball: vi.fn(),
-                polyline: vi.fn(() => ({}))
+                cuboid: vi.fn(() => new MockDesc()),
+                ball: vi.fn(() => new MockDesc()),
+                polyline: vi.fn(() => new MockDesc())
             },
             ActiveEvents: { COLLISION_EVENTS: 0 }
         },
         RigidBodyDesc: {
-            fixed: vi.fn(() => rigidBodyDescMock)
+            fixed: vi.fn(() => new MockDesc()),
+            dynamic: vi.fn(() => new MockDesc())
         },
         ColliderDesc: {
-            cuboid: vi.fn(() => ({ setActiveEvents: vi.fn() })),
-            ball: vi.fn()
+            cuboid: vi.fn(() => new MockDesc()),
+            ball: vi.fn(() => new MockDesc()),
+            polyline: vi.fn(() => new MockDesc())
         },
         ActiveEvents: { COLLISION_EVENTS: 0 }
     };
@@ -232,5 +257,66 @@ describe('Planet Control Logic', () => {
         planet.addTurretAtAngle(1, null);
         
         expect(planet.getControllerTeamId()).toBeNull();
+    });
+});
+
+describe('Planet Terrain Logic', () => {
+    let mockScene: any;
+    let Planet: any;
+    let planet: any;
+
+    beforeEach(async () => {
+        const phaserModule = await import('phaser');
+        const { Scene } = phaserModule.default; 
+        mockScene = new Scene();
+        
+        const planetModule = await import('../objects/Planet');
+        Planet = planetModule.Planet;
+        
+        // Use a larger radius for clear testing
+        planet = new Planet(mockScene, 100, 100, 50, 0xffffff, null);
+    });
+
+    it('should return approximately 0 at the original surface', () => {
+        const dist = planet.getDistanceToSurface(151, 100); // Slightly outside to avoid floating point issues
+        expect(dist).toBeGreaterThan(-1);
+        expect(dist).toBeLessThan(5);
+    });
+
+    it('should return positive value outside the surface', () => {
+        const dist = planet.getDistanceToSurface(160, 100);
+        // radius 50 + 10 = 60. distance to surface should be 10.
+        expect(dist).toBeGreaterThan(5);
+        expect(dist).toBeLessThan(15);
+    });
+
+    it('should return negative value inside the surface', () => {
+        const dist = planet.getDistanceToSurface(140, 100);
+        expect(dist).toBeLessThan(-8);
+        expect(dist).toBeGreaterThan(-12);
+    });
+
+    it('should detect deeper surface in a crater', () => {
+        // Create a crater at angle 0
+        planet.takeDamage(150, 100, 20);
+        
+        // Distance to "ground" at (150, 100) should now be positive 
+        // because the ground has receded towards the center.
+        // Surface at angle 0 should be around x=130.
+        // distFromCenter(150, 100) = 50.
+        // surfaceDist(angle 0) = 30 (approx).
+        // distanceToSurface = 50 - 30 = 20.
+        const dist = planet.getDistanceToSurface(150, 100);
+        expect(dist).toBeGreaterThan(15);
+    });
+
+    it('should spawn turret deeper in a crater', () => {
+        planet.takeDamage(150, 100, 20);
+        const turret = planet.addTurretAtAngle(0, 'red');
+        
+        // Original spawn was at 155.
+        // New spawn should be around 135.
+        expect(turret.position.x).toBeLessThan(145);
+        expect(turret.position.x).toBeGreaterThan(130);
     });
 });

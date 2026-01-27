@@ -105,7 +105,8 @@ export class Planet {
         // Simple spawn on original radius for now
         for (let i = 0; i < count; i++) {
             const angle = rng.nextRange(0, Math.PI * 2);
-            const turretDist = this.radius + 5; 
+            const surfaceDist = this.getSurfaceDistanceAtAngle(angle);
+            const turretDist = surfaceDist + 5; 
             const tx = this.body.translation().x + Math.cos(angle) * turretDist;
             const ty = this.body.translation().y + Math.sin(angle) * turretDist;
             
@@ -126,13 +127,62 @@ export class Planet {
     }
 
     addTurretAtAngle(angle: number, teamId: string | null) {
-        const turretDist = this.radius + 5; 
+        const surfaceDist = this.getSurfaceDistanceAtAngle(angle);
+        const turretDist = surfaceDist + 5; 
         const tx = this.body.translation().x + Math.cos(angle) * turretDist;
         const ty = this.body.translation().y + Math.sin(angle) * turretDist;
         
         const newTurret = new Turret(this.scene, tx, ty, angle, 10, 10, teamId);
         this.turrets.push(newTurret);
         return newTurret;
+    }
+
+    public getDistanceToSurface(worldX: number, worldY: number): number {
+        const pPos = this.body.translation();
+        const dx = worldX - pPos.x;
+        const dy = worldY - pPos.y;
+        const distFromCenter = Math.sqrt(dx * dx + dy * dy);
+        
+        if (distFromCenter === 0) return 0;
+
+        const angle = Math.atan2(dy, dx);
+        const surfaceDist = this.getSurfaceDistanceAtAngle(angle);
+
+        return distFromCenter - surfaceDist;
+    }
+
+    private getSurfaceDistanceAtAngle(angle: number): number {
+        const dirX = Math.cos(angle);
+        const dirY = Math.sin(angle);
+
+        let maxSurfaceDist = 0;
+
+        for (const region of this.regions) {
+            for (let i = 0; i < region.length; i++) {
+                const p1 = region[i];
+                const p2 = region[(i + 1) % region.length];
+
+                const x1 = p1[0], y1 = p1[1];
+                const x2 = p2[0], y2 = p2[1];
+
+                const dx = x2 - x1;
+                const dy = y2 - y1;
+                const det = dirY * dx - dirX * dy;
+                
+                if (Math.abs(det) < 0.000001) continue;
+
+                const t = (y1 * dx - x1 * dy) / det;
+                const u = (dirX * y1 - dirY * x1) / det;
+
+                if (t >= 0 && u >= 0 && u <= 1) {
+                    if (t > maxSurfaceDist) {
+                        maxSurfaceDist = t;
+                    }
+                }
+            }
+        }
+
+        return maxSurfaceDist === 0 ? this.radius : maxSurfaceDist;
     }
 
     public getControllerTeamId(): string | null {

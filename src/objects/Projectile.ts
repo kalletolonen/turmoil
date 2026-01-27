@@ -77,8 +77,7 @@ export class Projectile extends Phaser.GameObjects.Sprite {
             let minDist = Infinity;
             
             for (const p of planets) {
-                const dist = Phaser.Math.Distance.Between(translation.x, translation.y, p.position.x, p.position.y);
-                const surfaceDist = dist - p.radiusValue;
+                const surfaceDist = p.getDistanceToSurface(translation.x, translation.y);
                 if (surfaceDist < minDist) {
                     minDist = surfaceDist;
                     nearest = p;
