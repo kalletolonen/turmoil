@@ -186,7 +186,7 @@ describe('Turret Mechanics', () => {
 
     it('should initialize with 3 HP and 1 AP', () => {
         const turret = new Turret(mockScene, 0, 0, 0);
-        expect(turret.health).toBe(3);
+        expect(turret.health).toBe(100);
         expect(turret.actionPoints).toBe(1);
     });
 

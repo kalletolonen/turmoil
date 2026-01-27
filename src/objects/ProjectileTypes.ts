@@ -18,38 +18,38 @@ export interface ProjectileStats {
 export const PROJECTILE_DATA: Record<ProjectileType, ProjectileStats> = {
     [ProjectileType.BASIC]: {
         type: ProjectileType.BASIC,
-        damage: 1,
+        damage: 30,
         cost: 1,
         name: 'Basic',
         description: 'Standard projectile',
         color: 0xffff00,
-        explosionRadius: 15
+        explosionRadius: 20
     },
     [ProjectileType.GIGA_BLASTER]: {
         type: ProjectileType.GIGA_BLASTER,
-        damage: 3,
+        damage: 75,
         cost: 4,
         name: 'Giga Blaster',
         description: 'High damage projectile',
         color: 0xff00ff,
-        explosionRadius: 22.5
+        explosionRadius: 35
     },
     [ProjectileType.COLONIZER]: {
         type: ProjectileType.COLONIZER,
-        damage: 0.5, // Low impact damage
+        damage: 0, // No damage, gentle landing
         cost: 8,
         name: 'Colonizer',
         description: 'Spawns a turret on impact',
         color: 0x00ffff,
-        explosionRadius: 0
+        explosionRadius: 15
     },
     [ProjectileType.RADAR]: {
         type: ProjectileType.RADAR,
-        damage: 1,
+        damage: 0,
         cost: 10,
         name: 'Radar',
         description: 'Reveals enemy plans',
-        color: 0x00ff00, // Green?
+        color: 0x00ff00, 
         explosionRadius: 0
     }
 };

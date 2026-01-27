@@ -338,38 +338,25 @@ export class MainScene extends Phaser.Scene {
     }
   }
 
-  private handleProjectileHitTurret(projectileBody: any, turretBody: any) {
+  private handleProjectileHitTurret(projectileBody: any, _turretBody: any) {
       const projParams = projectileBody.userData;
-      const turretParams = turretBody.userData;
-      
       const projectileVisual = projParams.visual as Projectile;
-      const turretObj = turretParams.parent as Turret;
       
-      if (projectileVisual && turretObj) {
+      if (projectileVisual) {
           // Visuals
           const team = this.teamManager.getTeam(projectileVisual.teamId || '');
           const color = team ? team.color : 0xffffff;
           this.createExplosion(projectileVisual.x, projectileVisual.y, color);
 
-          const destroyed = turretObj.takeDamage(projectileVisual.damage);
+          // Apply Radial Damage
+          const stats = PROJECTILE_DATA[projectileVisual.projectileType];
+          const radius = stats ? stats.explosionRadius : 15;
+          const damage = projectileVisual.damage; // Use instance damage (which defaults to stats.damage)
+          
+          this.applyRadialDamage(projectileVisual.x, projectileVisual.y, radius, damage);
+
           projectileVisual.destroy();
           this.removeProjectile(projectileVisual);
-
-          if (destroyed) {
-              for (const planet of this.planets) {
-                  const tIndex = planet.turretsList.indexOf(turretObj);
-                  if (tIndex > -1) {
-                      planet.turretsList.splice(tIndex, 1);
-                      // Cache position before destroy
-                      const tx = turretObj.position.x;
-                      const ty = turretObj.position.y;
-                      
-                      turretObj.destroy();
-                      this.createExplosion(tx, ty, 0xffaa00, 30); // Use cached position
-                      break;
-                  }
-              }
-          }
       }
   }
 
@@ -394,6 +381,8 @@ export class MainScene extends Phaser.Scene {
               
               if (radius > 0) {
                  hitPlanet.takeDamage(projectileVisual.x, projectileVisual.y, radius);
+                 // Apply Radial Damage to nearby turrets
+                 this.applyRadialDamage(projectileVisual.x, projectileVisual.y, radius, projectileVisual.damage);
               }
           }
 
@@ -417,6 +406,10 @@ export class MainScene extends Phaser.Scene {
           const team = this.teamManager.getTeam(p1.teamId || '');
           const color = team ? team.color : 0xffffff;
           this.createExplosion(p1.x, p1.y, color);
+          
+          const stats = PROJECTILE_DATA[p1.projectileType];
+          this.applyRadialDamage(p1.x, p1.y, stats.explosionRadius, p1.damage);
+
           p1.destroy();
           this.removeProjectile(p1);
       }
@@ -424,9 +417,47 @@ export class MainScene extends Phaser.Scene {
           const team = this.teamManager.getTeam(p2.teamId || '');
           const color = team ? team.color : 0xffffff;
           this.createExplosion(p2.x, p2.y, color);
+
+          const stats = PROJECTILE_DATA[p2.projectileType];
+          this.applyRadialDamage(p2.x, p2.y, stats.explosionRadius, p2.damage); // P2 also explodes? Double damage? Should probably only one explode?
+          // Consistency: both explode.
+
           p2.destroy();
           this.removeProjectile(p2);
       }
+  }
+
+  private applyRadialDamage(x: number, y: number, radius: number, maxDamage: number) {
+        if (maxDamage <= 0 || radius <= 0) return;
+
+        const toDestroy: { turret: Turret, planet: Planet }[] = [];
+
+        this.planets.forEach(planet => {
+             planet.turretsList.forEach(turret => {
+                const dist = Phaser.Math.Distance.Between(x, y, turret.position.x, turret.position.y);
+                if (dist <= radius) {
+                    // Linear falloff: Max at 0, 0 at radius
+                    const damage = Math.floor(maxDamage * (1 - dist / radius));
+                    if (damage > 0) {
+                        const destroyed = turret.takeDamage(damage);
+                        if (destroyed) {
+                            toDestroy.push({ turret, planet });
+                        }
+                    }
+                }
+            });
+        });
+
+        toDestroy.forEach(({ turret, planet }) => {
+              const tIndex = planet.turretsList.indexOf(turret);
+              if (tIndex > -1) {
+                  planet.turretsList.splice(tIndex, 1);
+                  const tx = turret.position.x;
+                  const ty = turret.position.y;
+                  turret.destroy();
+                  this.createExplosion(tx, ty, 0xffaa00, 30);
+              }
+        });
   }
   
   private createExplosion(x: number, y: number, color: number, radius: number = 15) {

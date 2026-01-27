@@ -15,8 +15,8 @@ export class Turret {
     public aimVector: { x: number, y: number } | null = null;
     public projectileType: ProjectileType = ProjectileType.BASIC;
     
-    public health: number = 3;
-    public maxHealth: number = 3;
+    public health: number = 100;
+    public maxHealth: number = 100;
     
     public actionPoints: number = 1;
     public maxActionPoints: number = 10;
