@@ -583,10 +583,11 @@ export class MainScene extends Phaser.Scene {
                  // Apply Recoil
                  const recoilMagnitude = speed * proj.getMass() * 10.0; 
                  // Resistance/Friction of the base on the ground
-                 const recoilResistance = 2000.0; // Threshold to break static friction
+                 // If airborne (isFalling), resistance is 0.
+                 const recoilResistance = t.isFalling ? 0 : 2000.0; 
                  
                  if (recoilMagnitude > recoilResistance) {
-                     t.setFalling(true); // Enable dynamic physics
+                     if (!t.isFalling) t.setFalling(true); // Enable dynamic physics if grounded
                      
                      // Apply remaining force after overcoming resistance
                      const effectiveRecoil = recoilMagnitude - recoilResistance;

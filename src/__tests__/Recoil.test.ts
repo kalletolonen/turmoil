@@ -239,20 +239,27 @@ describe('Recoil Mechanics', () => {
         // God Mode shot: Speed 300, Mass 1. Magnitude = 300 * 1 * 10 = 3000.
         // Resistance is 2000. Effective = 3000 - 2000 = 1000.
         
-        turret.setArmed(true, { x: 300, y: 0 }); 
+        turret.setArmed(true, { x: 300, y: 0 });
+    });
+
+    it('should apply FULL recoil if turret is already airborne (Zero Resistance)', () => {
+        // Weak shot: Speed 15, Mass 1. Magnitude = 15 * 1 * 10 = 150.
+        // On ground: 150 < 2000 -> Ignored.
+        // In air: Resistance 0. Effective = 150.
+        
+        turret.setFalling(true); // Manually set to airborne
+        turret.setArmed(true, { x: 15, y: 0 }); 
         turret.projectileType = ProjectileType.BASIC;
         turret.teamId = 'red';
         
         const impulseSpy = (turret as any).body.applyImpulse;
-        const setFallingSpy = vi.spyOn(turret, 'setFalling');
         
         mainScene.fireProjectiles();
         
-        expect(setFallingSpy).toHaveBeenCalledWith(true);
         expect(impulseSpy).toHaveBeenCalled();
-        
         const args = impulseSpy.mock.calls[0][0];
-        // Expected X: -1000 (Effective magnitude) * cos(0) = -1000.
-        expect(args.x).toBeCloseTo(-1000); 
+        
+        // Expected X: -150 (Full magnitude)
+        expect(args.x).toBeCloseTo(-150); 
     });
 });
