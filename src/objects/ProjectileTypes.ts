@@ -41,7 +41,7 @@ export const PROJECTILE_DATA: Record<ProjectileType, ProjectileStats> = {
         name: 'Colonizer',
         description: 'Spawns a turret on impact',
         color: 0x00ffff,
-        explosionRadius: 15
+        explosionRadius: 0
     },
     [ProjectileType.RADAR]: {
         type: ProjectileType.RADAR,
