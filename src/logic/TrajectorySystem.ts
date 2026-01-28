@@ -5,13 +5,14 @@ import { Turret } from '../objects/Turret';
 import { GravitySystem } from './GravitySystem';
 import { ProjectileType } from '../objects/ProjectileTypes';
 import RAPIER from '@dimforge/rapier2d-compat';
+import { GameConfig } from '../config';
 
 export class TrajectorySystem {
     private scene: MainScene;
     
     // Constants from MainScene
     private readonly DRAG_SPEED_SCALE = 2.0;
-    private readonly MAX_PROJECTILE_SPEED = 100;
+
 
     constructor(scene: MainScene) {
         this.scene = scene;
@@ -93,8 +94,8 @@ export class TrajectorySystem {
             let vy = dy * this.DRAG_SPEED_SCALE;
             
             const speed = Math.sqrt(vx*vx + vy*vy);
-            if (speed > this.MAX_PROJECTILE_SPEED) {
-                const scale = this.MAX_PROJECTILE_SPEED / speed;
+            if (speed > GameConfig.MAX_PROJECTILE_SPEED) {
+                const scale = GameConfig.MAX_PROJECTILE_SPEED / speed;
                 vx *= scale;
                 vy *= scale;
             }

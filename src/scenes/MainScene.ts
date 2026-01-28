@@ -358,7 +358,7 @@ export class MainScene extends Phaser.Scene {
     }
   }
 
-  private handleProjectileHitTurret(projectileBody: any, _turretBody: any) {
+  private handleProjectileHitTurret(projectileBody: any, turretBody: any) {
       const projParams = projectileBody.userData;
       const projectileVisual = projParams.visual as Projectile;
       
@@ -371,9 +371,36 @@ export class MainScene extends Phaser.Scene {
           // Apply Radial Damage
           const stats = PROJECTILE_DATA[projectileVisual.projectileType];
           const radius = stats ? stats.explosionRadius : 15;
-          const damage = projectileVisual.damage; // Use instance damage (which defaults to stats.damage)
+          const damage = projectileVisual.damage; 
           
           this.applyRadialDamage(projectileVisual.x, projectileVisual.y, radius, damage);
+
+          // Determine location for ground damage
+          // Default to projectile position
+          let shockX = projectileVisual.x;
+          let shockY = projectileVisual.y;
+
+          // Try to use turret position if available (ensures ground hit)
+          const targetTurret = turretBody.userData?.parent as Turret;
+          if (targetTurret && targetTurret.position) {
+               shockX = targetTurret.position.x;
+               shockY = targetTurret.position.y;
+          }
+
+          // Also damage the ground (Planet) explicitly
+          let closestPlanet: Planet | null = null;
+          let minDist = Infinity;
+          for (const planet of this.planets) {
+              const dist = Phaser.Math.Distance.Between(shockX, shockY, planet.position.x, planet.position.y);
+              if (dist < minDist) {
+                  minDist = dist;
+                  closestPlanet = planet;
+              }
+          }
+          
+          if (closestPlanet) {
+              closestPlanet.takeDamage(shockX, shockY, radius);
+          }
 
           projectileVisual.destroy();
           this.removeProjectile(projectileVisual);

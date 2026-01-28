@@ -45,6 +45,7 @@ export class UIManager {
             button.setTint(0x444444);
             button.setInteractive({ useHandCursor: true });
             button.setName(`btn_${type}`); // Identify for update
+            button.setData('isUI', true);
             
             // Click Handler
             button.on('pointerdown', () => {
@@ -82,7 +83,7 @@ export class UIManager {
         
         // Only show for player owned turrets
         const team = this.scene.teamManager.getTeam(this.scene.selectedTurret.teamId!);
-        if (!team || team.isAI) {
+        if (team && team.isAI) {
              this.weaponUIContainer.setVisible(false);
              return;
         }

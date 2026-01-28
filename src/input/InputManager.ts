@@ -3,6 +3,7 @@ import { MainScene } from '../scenes/MainScene';
 import { Turret } from '../objects/Turret';
 import { TurnPhase } from '../logic/TurnManager';
 import { PROJECTILE_DATA } from '../objects/ProjectileTypes';
+import { GameConfig } from '../config';
 
 export class InputManager {
     private scene: MainScene;
@@ -12,7 +13,6 @@ export class InputManager {
     public dragCurrentPos: Phaser.Math.Vector2 | null = null;
     
     private readonly DRAG_SPEED_SCALE = 2.0;
-    private readonly MAX_PROJECTILE_SPEED = 100;
 
     constructor(scene: MainScene) {
         this.scene = scene;
@@ -36,7 +36,11 @@ export class InputManager {
          });
          
          // Drag Logic
-         this.scene.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+         this.scene.input.on('pointerdown', (pointer: Phaser.Input.Pointer, currentlyOver: Phaser.GameObjects.GameObject[]) => {
+             // Check if we clicked UI
+             const clickedUI = currentlyOver.some(obj => obj.getData('isUI'));
+             if (clickedUI) return;
+
              if (this.scene.turnManager.currentPhase !== TurnPhase.PLANNING) return;
              
              let clickedTurret: Turret | null = null;
@@ -118,9 +122,9 @@ export class InputManager {
                           let finalVx = vx;
                           let finalVy = vy;
                           
-                          const currentSpeed = Math.sqrt(vx*vx + vy*vy);
-                          if (currentSpeed > this.MAX_PROJECTILE_SPEED) {
-                              const scale = this.MAX_PROJECTILE_SPEED / currentSpeed;
+                            const currentSpeed = Math.sqrt(vx*vx + vy*vy);
+                          if (currentSpeed > GameConfig.MAX_PROJECTILE_SPEED) {
+                              const scale = GameConfig.MAX_PROJECTILE_SPEED / currentSpeed;
                               finalVx *= scale;
                               finalVy *= scale;
                           }
