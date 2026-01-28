@@ -142,8 +142,8 @@ export class InputManager {
                               let finalVy = vy;
      
                               const currentSpeed = Math.sqrt(vx*vx + vy*vy);
-                              if (currentSpeed > this.MAX_PROJECTILE_SPEED) {
-                                  const scale = this.MAX_PROJECTILE_SPEED / currentSpeed;
+                              if (currentSpeed > GameConfig.MAX_PROJECTILE_SPEED) {
+                                  const scale = GameConfig.MAX_PROJECTILE_SPEED / currentSpeed;
                                   finalVx *= scale;
                                   finalVy *= scale;
                               }

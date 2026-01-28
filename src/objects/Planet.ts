@@ -5,6 +5,7 @@ import { SeededRNG } from '../logic/SeededRNG';
 import { Turret } from './Turret';
 import { FXManager } from '../logic/FXManager';
 import polybool from 'polybooljs';
+import earcut from 'earcut';
 
 export class Planet {
     private body: RAPIER.RigidBody;
@@ -56,6 +57,7 @@ export class Planet {
         this.draw();
     }
 
+
     private rebuildCollider() {
         const rapierManager = RapierManager.getInstance();
         if (!rapierManager.world) return;
@@ -72,18 +74,33 @@ export class Planet {
         this.regions.forEach(region => {
              if (region.length < 3) return;
              
-             // Flatten for Rapier Polyline
-             const vertices: Float32Array = new Float32Array(region.length * 2);
-             for(let i=0; i<region.length; i++) {
-                 vertices[i*2] = region[i][0];
-                 vertices[i*2+1] = region[i][1];
-             }
+             // Earcut expects flat array [x0, y0, x1, y1, ...]
+             const flatVertices: number[] = [];
+             region.forEach(p => {
+                 flatVertices.push(p[0], p[1]);
+             });
+
+             // Triangulate
+             const indices = earcut(flatVertices);
              
-             // Using polyline for boundary
-             const colliderDesc = RAPIER.ColliderDesc.polyline(vertices);
-             rapierManager.world!.createCollider(colliderDesc, this.body);
+             // Manually create a collider for each triangle
+             for (let i = 0; i < indices.length; i += 3) {
+                 const idx1 = indices[i];
+                 const idx2 = indices[i+1];
+                 const idx3 = indices[i+2];
+                 
+                 const p1 = { x: flatVertices[idx1 * 2], y: flatVertices[idx1 * 2 + 1] };
+                 const p2 = { x: flatVertices[idx2 * 2], y: flatVertices[idx2 * 2 + 1] };
+                 const p3 = { x: flatVertices[idx3 * 2], y: flatVertices[idx3 * 2 + 1] };
+                 
+                 // Rapier triangleCollider
+                 const triDesc = RAPIER.ColliderDesc.triangle(p1, p2, p3);
+                 triDesc.setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
+                 rapierManager.world!.createCollider(triDesc, this.body);
+             }
         });
     }
+
 
     private draw() {
         this.visual.clear();

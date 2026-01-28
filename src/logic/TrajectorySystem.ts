@@ -22,6 +22,11 @@ export class TrajectorySystem {
         const predictionWorld = this.scene.rapierManager.createPredictionWorld();
         if (!predictionWorld) return;
 
+        // Ensure collision events are enabled for all colliders (snapshot might lose them or we want to be sure)
+        predictionWorld.forEachCollider(c => {
+            c.setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
+        });
+
         const ghostProjectiles: Projectile[] = [];
         
         // Helper to add ghost
@@ -115,50 +120,103 @@ export class TrajectorySystem {
         const steps = 180; // 3 seconds
 
         const eventQueue = new RAPIER.EventQueue(true);
-        const activeGhosts = new Set(ghostProjectiles);
+        // Map body handle to ghost projectile
+        const ghostMap = new Map<number, Projectile>();
+        ghostProjectiles.forEach(g => {
+            // Access private bodyId (or expose it via getter). Using any for now as quick fix.
+            const body = (g as any).bodyId; 
+            if (body) {
+                ghostMap.set(body.handle, g);
+            }
+        });
 
         for (let i = 0; i < steps; i++) {
-            if (activeGhosts.size === 0) break;
+            if (ghostMap.size === 0) break;
 
-            const activeArray = Array.from(activeGhosts);
+            // Store previous positions for raycasting
+            const prevPositions = new Map<number, {x: number, y: number}>();
+            ghostMap.forEach((g, handle) => {
+                prevPositions.set(handle, { x: g.x, y: g.y });
+            });
+
+            const activeArray = Array.from(ghostMap.values());
             GravitySystem.applyGravity(activeArray, this.scene.planets);
             
             predictionWorld.step(eventQueue);
             
-            // Handle collisions in prediction
+            // 1. Check Physics Events (keep good logic)
             eventQueue.drainCollisionEvents((handle1, handle2, started) => {
                 if (!started) return;
                 
-                // Check collisions
+                // Get colliders
                 const c1 = predictionWorld.getCollider(handle1);
                 const c2 = predictionWorld.getCollider(handle2);
                 if (!c1 || !c2) return;
                 
+                // Get parents (bodies)
                 const b1 = c1.parent();
                 const b2 = c2.parent();
                 if (!b1 || !b2) return;
                 
-                const d1 = (b1 as any).userData;
-                const d2 = (b2 as any).userData;
+                const h1 = b1.handle;
+                const h2 = b2.handle;
                 
-                // Identify if any ghost projectile is involved
-                if (d1?.type === 'projectile') {
-                    const g = d1.visual as Projectile;
-                    if (activeGhosts.has(g)) {
-                       activeGhosts.delete(g);
-                       g.destroy();
-                    }
+                // Check if either body is a ghost
+                if (ghostMap.has(h1)) {
+                    const g = ghostMap.get(h1)!;
+                    g.destroy();
+                    ghostMap.delete(h1);
                 }
-                if (d2?.type === 'projectile') {
-                    const g = d2.visual as Projectile;
-                    if (activeGhosts.has(g)) {
-                       activeGhosts.delete(g);
-                       g.destroy();
-                    }
+                
+                if (ghostMap.has(h2)) {
+                    const g = ghostMap.get(h2)!;
+                    g.destroy();
+                    ghostMap.delete(h2);
                 }
             });
 
-            activeGhosts.forEach(ghost => {
+            // 2. Manual Raycast Check (Fallback for tunneling/thin walls)
+            ghostMap.forEach((g, handle) => {
+                const prev = prevPositions.get(handle);
+                if (!prev) return;
+                
+                // Ray from prev to current
+                const dx = g.x - prev.x;
+                const dy = g.y - prev.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                
+                if (dist > 0.001) {
+                     const dir = { x: dx/dist, y: dy/dist };
+                     const ray = new RAPIER.Ray({ x: prev.x, y: prev.y }, dir);
+                     
+                     // We need to ignore the projectile's own collider
+                     // But accessing collider from ghost is tricky if private.
+                     // However, Raycast can just check `toi`. If `toi < dist` and hit is NOT self.
+                     // Actually, usually we can pass a filter.
+                     
+                     // Simple approach: Interaction groups or predicate.
+                     // `castRay` signature: (ray, maxToi, solid, groups, filter, filterData, target)
+                     // or CastRay(ray, maxToi, true)
+                     
+                     const hit = predictionWorld.castRay(ray, dist, true);
+                     if (hit) {
+                         // Check what we hit.
+                         // If we hit ourself, ignore.
+                         const collider = hit.collider;
+                         const parent = collider.parent();
+                         
+                         if (parent && parent.handle !== handle) {
+                             // Hit something else (Planet!)
+                             // console.log("Raycast Hit!", parent.handle);
+                             g.destroy();
+                             ghostMap.delete(handle);
+                         }
+                     }
+                }
+            });
+
+            // Update Graphics
+            ghostMap.forEach((ghost) => {
                 const startPos = { x: ghost.x, y: ghost.y };
                 ghost.update(); // Update sprite from body
                 const endPos = { x: ghost.x, y: ghost.y };

@@ -682,6 +682,12 @@ export class MainScene extends Phaser.Scene {
               }
               t.addActionPoints(apGain);
 
+               // Visual Feedback
+              const text = `+${apGain}`;
+              // Green for player/friendly, maybe different for enemy?
+              // For now simpler: Cyan for AP.
+              FXManager.getInstance().showFloatingText(t.position.x, t.position.y - 20, text, '#00ffff');
+
               // If Red Faction Max AP config is enabled, max it out
               if (GameConfig.RED_FACTION_MAX_AP && t.teamId === 'red') {
                   t.setMaxActionPoints();

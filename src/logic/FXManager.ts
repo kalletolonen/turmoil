@@ -145,6 +145,28 @@ export class FXManager {
          }
     }
     
+    public showFloatingText(x: number, y: number, text: string, color: string) {
+        const floatingText = this.scene.add.text(x, y, text, {
+            fontSize: '16px',
+            color: color,
+            fontFamily: 'Arial',
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 3
+        });
+        floatingText.setOrigin(0.5, 0.5);
+        floatingText.setDepth(3000); // Ensure it's above everything
+
+        this.scene.tweens.add({
+            targets: floatingText,
+            y: y - 40, // Move up
+            alpha: 0,
+            duration: 1500,
+            ease: 'Power1',
+            onComplete: () => floatingText.destroy()
+        });
+    }
+
     public clear() {
         const rapierManager = RapierManager.getInstance();
         if (!rapierManager.world) return;
