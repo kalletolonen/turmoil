@@ -29,4 +29,14 @@ export class SeededRNG {
   nextRange(min: number, max: number): number {
     return this.nextFloat() * (max - min) + min;
   }
+  /**
+   * Shuffles an array in place using the Fisher-Yates algorithm.
+   */
+  shuffle<T>(array: T[]): T[] {
+    for (let i = array.length - 1; i > 0; i--) {
+      const j = this.nextInt(0, i + 1);
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+  }
 }

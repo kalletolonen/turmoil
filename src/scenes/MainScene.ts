@@ -16,6 +16,7 @@ import { InputManager } from '../input/InputManager';
 import { TrajectorySystem } from '../logic/TrajectorySystem';
 import { FXManager } from '../logic/FXManager';
 import { GameConfig } from '../config';
+import { MapGenerator } from '../logic/MapGenerator';
 
 export class MainScene extends Phaser.Scene {
   public rapierManager: RapierManager;
@@ -47,7 +48,7 @@ export class MainScene extends Phaser.Scene {
     this.teamManager = new TeamManager();
     this.aiManager = new AIManager();
     this.turnManager = new TurnManager();
-    this.rng = new SeededRNG(12345);
+    this.rng = new SeededRNG(GameConfig.SEED);
   }
 
   preload() {
@@ -87,71 +88,28 @@ export class MainScene extends Phaser.Scene {
         const greenTeam = this.teamManager.addTeam({ id: 'green', name: 'Green Faction', color: 0x00ff00, isAI: true });
 
         // Spawn Planets with Overlap Prevention
-        const MAX_RETRIES = 50;
-        const MIN_SEPARATION = 120; // Increased padding for more interesting trajectories
+        // Generate Map
+        const mapGen = new MapGenerator();
+        const mapData = mapGen.generate({
+            width: 800,
+            height: 600,
+            planetCount: 6,
+            minPlanetRadius: 25,
+            maxPlanetRadius: 70,
+            padding: 120
+        }, this.rng);
 
-        for (let i = 0; i < 6; i++) { // Increased planet count
-            let placed = false;
-            let attempts = 0;
+        mapData.planets.forEach((pData) => {
+             const planet = new Planet(this, pData.x, pData.y, pData.radius, pData.color, pData.teamId);
+             
+             if (pData.teamId === redTeam.id) redTeam.addPlanet(planet);
+             if (pData.teamId === greenTeam.id) greenTeam.addPlanet(planet);
 
-            while (!placed && attempts < MAX_RETRIES) {
-                attempts++;
-                
-                const radius = this.rng.nextRange(25, 70); // Slightly smaller range for better fit
-                const x = this.rng.nextRange(80, 720);
-                const y = this.rng.nextRange(80, 520);
-                
-                // Check overlap with existing planets
-                let overlap = false;
-                for (const other of this.planets) {
-                    const otherPos = other.position;
-                    const dist = Phaser.Math.Distance.Between(x, y, otherPos.x, otherPos.y);
-                    const minDist = radius + other.radiusValue + MIN_SEPARATION; 
-                    
-                    if (dist < minDist) {
-                        overlap = true;
-                        break;
-                    }
-                }
-
-                if (!overlap) {
-                    // 30% chance for a completely neutral planet (obstacle only)
-                    const isNaturalNeutral = this.rng.nextFloat() < 0.3;
-                    
-                    let teamId = null;
-                    let color = 0x888888; // Default Grey
-                    let turretCount = 0;
-
-                    if (!isNaturalNeutral) {
-                        // Assign Team based on X position for gameplay balance
-                        if (x < 400) {
-                            teamId = redTeam.id;
-                        } else {
-                            teamId = greenTeam.id;
-                        }
-                        turretCount = this.rng.nextInt(2, 6);
-                    } else {
-                        color = 0x666666; // Darker Grey for natural obstacles
-                    }
-
-                    const planet = new Planet(this, x, y, radius, color, teamId);
-                    
-                    if (teamId === redTeam.id) redTeam.addPlanet(planet);
-                    if (teamId === greenTeam.id) greenTeam.addPlanet(planet);
-                    
-                    if (turretCount > 0) {
-                        planet.spawnTurrets(this.rng, turretCount);
-                    }
-
-                    this.planets.push(planet);
-                    placed = true;
-                }
-            }
-            
-            if (!placed) {
-                console.warn(`Could not place planet ${i} after ${MAX_RETRIES} attempts.`);
-            }
-        }
+             if (pData.turretCount > 0) {
+                 planet.spawnTurrets(this.rng, pData.turretCount); // MainScene RNG is synced
+             }
+             this.planets.push(planet);
+        });
 
         // Spawn Debris
         // for (let i = 0; i < 20; i++) {
@@ -245,6 +203,19 @@ export class MainScene extends Phaser.Scene {
 
     if (shouldStep) {
         GravitySystem.applyGravity(this.projectiles, this.planets);
+
+        // Apply gravity to falling turrets
+        const fallingTurrets: Turret[] = [];
+        this.planets.forEach(p => {
+             p.turretsList.forEach(t => {
+                 if (t.isFalling) fallingTurrets.push(t);
+             });
+        });
+        if (fallingTurrets.length > 0) {
+            GravitySystem.applyGravity(fallingTurrets, this.planets);
+            fallingTurrets.forEach(t => t.update());
+        }
+
         this.rapierManager.step();
         this.projectiles.forEach(p => p.update(this.planets));
     }
@@ -318,6 +289,55 @@ export class MainScene extends Phaser.Scene {
         // 3. Projectile vs Projectile
         else if (data1?.type === 'projectile' && data2?.type === 'projectile') {
             pendingDestruction.push(() => this.handleProjectileHitProjectile(body1, body2));
+        }
+
+        // 4. Turret vs Planet (Landing)
+        else if ((data1?.type === 'turret' && data2?.type === 'planet') || 
+                 (data2?.type === 'turret' && data1?.type === 'planet')) {
+            
+            const tBody = data1.type === 'turret' ? body1 : body2;
+            const pBody = data1.type === 'planet' ? body1 : body2;
+            
+            const turret = (tBody as any).userData.parent as Turret;
+            const planet = (pBody as any).userData.parent as Planet;
+
+            if (turret && turret.isFalling) {
+                // Land the turret
+                turret.setFalling(false);
+                
+                // Align rotation to gravity/surface normal?
+                // For now, calculating angle from heavy center is a decent approx
+                const angle = Math.atan2(turret.position.y - planet.position.y, turret.position.x - planet.position.x);
+                // Turret rotation is usually tangent? Or up?
+                // Constructor: `new Turret(..., angle)`
+                // If angle is the spawn angle, `this.visual.setRotation(angle)`.
+                // If it is the rotation on surface, it matches "up" vector + 90 deg usually or just the angle parameter passed to `setRotation`.
+                
+                // Wait, in `Turret.ts`: `setRotation(angle)`. The sprite is `turret_base`.
+                // Usually sprites are right-facing.
+                // It relies on how `Planet.spawnTurrets` does it.
+                // `const angle = ...; ... new Turret(..., angle ... )`.
+                // So expected `rotation` is the angle from planet center.
+                // Rapier rotation? `setRotation(angle)`.
+                
+                // So we should update rotation to `angle`.
+                // But `setFalling(false)` makes it fixed. We can set rotation.
+                // NOTE: `turret.body` is now Fixed. We can iterate it.
+                // We should add a method `turret.land(angle)` or just do it here.
+                // Accessing private body is via `turret.position` / `rotation`.
+                
+                // We can't set rotation easily on Turret without a setter or accessing Rapier body directly (which we have in data1/data2?).
+                // `tBody.setRotation(angle)` works.
+                tBody.setRotation(angle, true);
+                
+                // Also update visual immediately? `Turret` updates visual in its own update?
+                // `Turret` doesn't have an `update()` method in `Turret.ts`, it just relies on initial setup + manually updating?
+                // Wait, `Turret.ts` doesn't have an `update()`.
+                // So the visual sprite will NOT follow the physics body if it moves!
+                // Major discovery: `Turret` lacks a sync method for Visual -> Physics Body if body moves.
+                // If it was Static/Fixed, it never moved, so it was fine.
+                // Now that it moves, we MUST add an `update()` method to `Turret` to sync Sprite to Body.
+            }
         }
     });
 
@@ -440,6 +460,50 @@ export class MainScene extends Phaser.Scene {
                     const damage = Math.floor(maxDamage * (1 - dist / radius));
                     if (damage > 0) {
                         const destroyed = turret.takeDamage(damage);
+                        
+                        // Apply Kinetic Blast Impulse
+                        // Make sure turret is dynamic (falling) if it survives but gets hit hard?
+                        // If we want it to fly off, it MUST be set to falling (dynamic)
+                        // Threshold for "blasting off": if damage > 10% of max health? 
+                        // Or just always if near? if dist/radius < 0.5?
+                        
+                        // For now, let's say if it takes ANY damage from an explosion, and the ground is somewhat shaky, we might knock it loose.
+                        // But strictly: if the ground is destroyed, it falls.
+                        // "Blasted off" implies it flies UP or AWAY.
+                        
+                        // If we want "Blasted off", we should force it to fall (Dynamic) and apply impulse.
+                        // But we only want this if the ground is NOT supporting it effectively?
+                        // Or if the blast is strong enough to rip it off the foundation.
+                        
+                        // Let's implement: If damage > 20, force fall and apply impulse.
+                        if (damage > 20 && !turret.isFalling) {
+                             turret.setFalling(true);
+                        }
+
+                        if (turret.isFalling) {
+                             // Apply Impulse away from explosion
+                             const angle = Math.atan2(turret.position.y - y, turret.position.x - x);
+                             const force = 5 * turret.getMass(); // Tune this!
+                             const ix = Math.cos(angle) * force;
+                             const iy = Math.sin(angle) * force;
+                             turret.applyForce(ix, iy); // applyForce uses applyImpulse with scaling?
+                             
+                             // Turret.applyForce scales by 0.016. so we need to compensate or fix Turret.applyForce.
+                             // Proj.applyForce uses addForce? No, applyImpulse.
+                             
+                             // Let's bypass Turret.applyForce and use body directly if we want pure impulse control?
+                             // Or fix Turret.applyForce to NOT scale if we mean impulse?
+                             // GravitySystem sends Force. Turret.applyForce converts F -> Impulse for dt=0.016.
+                             // Here we want Impulse.
+                             // So if we assume applyForce expects Force, then Impulse = F * dt.
+                             // We want to deliver specific Impulse J.
+                             // So F = J / dt.
+                             // So pass J / 0.016 to applyForce.
+                             
+                             const dt = 0.016;
+                             turret.applyForce(ix / dt, iy / dt);
+                        }
+
                         if (destroyed) {
                             toDestroy.push({ turret, planet });
                         }

@@ -182,7 +182,7 @@ export class Planet {
             }
         }
 
-        return maxSurfaceDist === 0 ? this.radius : maxSurfaceDist;
+        return maxSurfaceDist;
     }
 
     public getControllerTeamId(): string | null {
@@ -229,5 +229,15 @@ export class Planet {
 
         // Spawn Physical Debris
         FXManager.getInstance().createDebrisBurst(worldX, worldY, this.color, 5);
+
+        // Check for undermined turrets
+        this.turrets.forEach(turret => {
+            if (!turret.isFalling) {
+                const dist = this.getDistanceToSurface(turret.position.x, turret.position.y);
+                if (dist > 5) {
+                    turret.setFalling(true);
+                }
+            }
+        });
     }
 }

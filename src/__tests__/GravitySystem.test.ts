@@ -7,7 +7,8 @@ function createMockProjectile(x: number, y: number) {
         active: true,
         position: { x, y },
         applyForce: vi.fn(),
-        destroy: vi.fn()
+        destroy: vi.fn(),
+        getMass: () => 1
     } as any;
 }
 

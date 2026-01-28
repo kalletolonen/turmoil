@@ -179,6 +179,13 @@ export class Projectile extends Phaser.GameObjects.Sprite {
         }
     }
 
+    getMass(): number {
+        if (this.bodyId.isValid()) {
+            return this.bodyId.mass();
+        }
+        return 1;
+    }
+
     get position(): { x: number, y: number } {
         if (this.bodyId.isValid()) {
             return this.bodyId.translation();

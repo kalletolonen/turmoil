@@ -15,6 +15,52 @@ export class Turret {
     public aimVector: { x: number, y: number } | null = null;
     public projectileType: ProjectileType = ProjectileType.BASIC;
     
+    public isFalling: boolean = false;
+
+    public setFalling(falling: boolean) {
+        if (this.isFalling === falling) return;
+        this.isFalling = falling;
+        
+        if (this.body) {
+            if (falling) {
+                this.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
+                this.body.wakeUp();
+            } else {
+                this.body.setBodyType(RAPIER.RigidBodyType.Fixed, true);
+                this.body.setLinvel({ x: 0, y: 0 }, true);
+                this.body.setAngvel(0, true);
+            }
+        }
+    }
+
+    public applyForce(x: number, y: number) {
+        if (this.body && this.isFalling) {
+            this.body.applyImpulse({ x: x * 0.016, y: y * 0.016 }, true); // Scale for time step approx
+        }
+    }
+
+    public getMass(): number {
+        if (this.body) {
+            return this.body.mass();
+        }
+        return 100; // Default high mass if no body
+    }
+    
+    public update() {
+        if (this.body) {
+            const pos = this.body.translation();
+            this.visual.setPosition(pos.x, pos.y);
+            this.visual.setRotation(this.body.rotation());
+            
+            // Optimization: Only update graphics if moved?
+            // For falling turrets, they move every frame.
+            if (this.isFalling) {
+                 this.updateHealthBar();
+                 this.updateSelectionBracket();
+            }
+        }
+    }
+
     public health: number = 100;
     public maxHealth: number = 100;
     
