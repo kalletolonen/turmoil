@@ -39,6 +39,12 @@ export class Turret {
         }
     }
 
+    public applyImpulse(x: number, y: number) {
+        if (this.body && this.isFalling) {
+            this.body.applyImpulse({ x: x, y: y }, true);
+        }
+    }
+
     public getMass(): number {
         if (this.body) {
             return this.body.mass();

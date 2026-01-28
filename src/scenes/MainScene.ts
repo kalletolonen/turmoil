@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { RapierManager } from '../physics/RapierManager';
+import RAPIER from '@dimforge/rapier2d-compat';
 import { TurnManager, TurnPhase } from '../logic/TurnManager';
 import { FleetRenderer } from '../renderer/FleetRenderer';
 import { SeededRNG } from '../logic/SeededRNG';
@@ -302,41 +303,23 @@ export class MainScene extends Phaser.Scene {
             const planet = (pBody as any).userData.parent as Planet;
 
             if (turret && turret.isFalling) {
-                // Land the turret
-                turret.setFalling(false);
+                // Check if we should land
+                const tVel = (tBody as RAPIER.RigidBody).linvel();
+                const dx = turret.position.x - planet.position.x;
+                const dy = turret.position.y - planet.position.y;
                 
-                // Align rotation to gravity/surface normal?
-                // For now, calculating angle from heavy center is a decent approx
-                const angle = Math.atan2(turret.position.y - planet.position.y, turret.position.x - planet.position.x);
-                // Turret rotation is usually tangent? Or up?
-                // Constructor: `new Turret(..., angle)`
-                // If angle is the spawn angle, `this.visual.setRotation(angle)`.
-                // If it is the rotation on surface, it matches "up" vector + 90 deg usually or just the angle parameter passed to `setRotation`.
+                // Dot product: > 0 means moving away (jumping), < 0 means moving towards (falling)
+                const dot = tVel.x * dx + tVel.y * dy;
+                const speedSq = tVel.x * tVel.x + tVel.y * tVel.y;
                 
-                // Wait, in `Turret.ts`: `setRotation(angle)`. The sprite is `turret_base`.
-                // Usually sprites are right-facing.
-                // It relies on how `Planet.spawnTurrets` does it.
-                // `const angle = ...; ... new Turret(..., angle ... )`.
-                // So expected `rotation` is the angle from planet center.
-                // Rapier rotation? `setRotation(angle)`.
-                
-                // So we should update rotation to `angle`.
-                // But `setFalling(false)` makes it fixed. We can set rotation.
-                // NOTE: `turret.body` is now Fixed. We can iterate it.
-                // We should add a method `turret.land(angle)` or just do it here.
-                // Accessing private body is via `turret.position` / `rotation`.
-                
-                // We can't set rotation easily on Turret without a setter or accessing Rapier body directly (which we have in data1/data2?).
-                // `tBody.setRotation(angle)` works.
-                tBody.setRotation(angle, true);
-                
-                // Also update visual immediately? `Turret` updates visual in its own update?
-                // `Turret` doesn't have an `update()` method in `Turret.ts`, it just relies on initial setup + manually updating?
-                // Wait, `Turret.ts` doesn't have an `update()`.
-                // So the visual sprite will NOT follow the physics body if it moves!
-                // Major discovery: `Turret` lacks a sync method for Visual -> Physics Body if body moves.
-                // If it was Static/Fixed, it never moved, so it was fine.
-                // Now that it moves, we MUST add an `update()` method to `Turret` to sync Sprite to Body.
+                // Only land if falling towards planet OR moving very slowly (settled)
+                if (dot < 0 || speedSq < 1.0) {
+                     turret.setFalling(false);
+                     
+                     // Align rotation to gravity/surface normal
+                     const angle = Math.atan2(dy, dx);
+                     tBody.setRotation(angle, true);
+                }
             }
         }
     });
@@ -596,6 +579,23 @@ export class MainScene extends Phaser.Scene {
                      if (team) proj.setTint(team.color);
                  }
                  this.projectiles.push(proj);
+                 
+                 // Apply Recoil
+                 const recoilMagnitude = speed * proj.getMass() * 10.0; 
+                 // Resistance/Friction of the base on the ground
+                 const recoilResistance = 2000.0; // Threshold to break static friction
+                 
+                 if (recoilMagnitude > recoilResistance) {
+                     t.setFalling(true); // Enable dynamic physics
+                     
+                     // Apply remaining force after overcoming resistance
+                     const effectiveRecoil = recoilMagnitude - recoilResistance;
+                     
+                     const recoilX = -Math.cos(angle) * effectiveRecoil;
+                     const recoilY = -Math.sin(angle) * effectiveRecoil;
+                     
+                     t.applyImpulse(recoilX, recoilY);
+                 }
              }
          });
      });
