@@ -1,6 +1,5 @@
 import Phaser from 'phaser';
 import { RapierManager } from '../physics/RapierManager';
-import RAPIER from '@dimforge/rapier2d-compat';
 import { TurnManager, TurnPhase } from '../logic/TurnManager';
 import { FleetRenderer } from '../renderer/FleetRenderer';
 import { SeededRNG } from '../logic/SeededRNG';
@@ -11,13 +10,15 @@ import { Turret } from '../objects/Turret';
 import { GravitySystem } from '../logic/GravitySystem';
 import { TeamManager } from '../logic/TeamManager';
 import { AIManager } from '../logic/AIManager';
-import { ProjectileType, PROJECTILE_DATA } from '../objects/ProjectileTypes';
 import { UIManager } from '../ui/UIManager';
 import { InputManager } from '../input/InputManager';
 import { TrajectorySystem } from '../logic/TrajectorySystem';
 import { FXManager } from '../logic/FXManager';
 import { GameConfig } from '../config';
 import { MapGenerator } from '../logic/MapGenerator';
+import { TextureGenerator } from '../renderer/TextureGenerator';
+import { CombatManager } from '../logic/CombatManager';
+import { CollisionManager } from '../logic/CollisionManager';
 
 export class MainScene extends Phaser.Scene {
   public rapierManager: RapierManager;
@@ -42,6 +43,8 @@ export class MainScene extends Phaser.Scene {
   public uiManager!: UIManager;
   public inputManager!: InputManager;
   public trajectorySystem!: TrajectorySystem;
+  public combatManager!: CombatManager;
+  public collisionManager!: CollisionManager;
 
   constructor() {
     super('MainScene');
@@ -60,7 +63,16 @@ export class MainScene extends Phaser.Scene {
     // 1. Init Physics
     await this.rapierManager.init();
     
-    // 2. Setup Renderer
+    // 2. Setup Managers
+    this.combatManager = new CombatManager(this);
+    this.collisionManager = new CollisionManager(
+        this,
+        this.combatManager,
+        this.teamManager,
+        () => this.planets,
+        (p) => this.removeProjectile(p)
+    );
+
     // 2. Setup Renderer
     this.fleetRenderer = new FleetRenderer(this); // Pass 'this' as scene
     this.graphics = this.add.graphics();
@@ -76,7 +88,7 @@ export class MainScene extends Phaser.Scene {
     this.aiManager.init();
 
     // Generate all textures
-    this.generateTextures();
+    TextureGenerator.generate(this);
     
     // Init FXManager
     FXManager.init(this);
@@ -233,99 +245,16 @@ export class MainScene extends Phaser.Scene {
     // Update Debris visuals
     this.debris.forEach(d => d.update());
 
-    // List of pending destruction tasks
-    const pendingDestruction: (() => void)[] = [];
-
     // Update FX
     FXManager.getInstance().update(delta);
 
     // Handle Collisions
-    this.rapierManager.drainCollisionEvents((handle1, handle2, started) => {
-        if (!started) return;
-        // console.log(`Collision Detected: ${handle1} <-> ${handle2}`);
-
-        // Find bodies by handle
-        // Rapier events return collider handles
-        const collider1 = this.rapierManager.world?.getCollider(handle1);
-        const collider2 = this.rapierManager.world?.getCollider(handle2);
-
-        if (!collider1 || !collider2) {
-             console.log("Could not find colliders for handles:", handle1, handle2);
-             return;
-        }
-        
-        const body1 = collider1.parent();
-        const body2 = collider2.parent();
-
-        if (!body1 || !body2) {
-            console.log("Colliders have no parent bodies");
-            return;
-        }
-
-        const data1 = (body1 as any).userData;
-        const data2 = (body2 as any).userData;
-        
-        // console.log("Collision userData:", data1, data2);
-
-        // Check Collision Types
-        
-        // 1. Projectile vs Turret
-        if ((data1?.type === 'projectile' && data2?.type === 'turret') || 
-            (data2?.type === 'projectile' && data1?.type === 'turret')) {
-            
-            const pBody = data1.type === 'projectile' ? body1 : body2;
-            const tBody = data1.type === 'turret' ? body1 : body2;
-            
-            pendingDestruction.push(() => this.handleProjectileHitTurret(pBody, tBody));
-        }
-        
-        // 2. Projectile vs Planet
-        else if ((data1?.type === 'projectile' && data2?.type === 'planet') || 
-                 (data2?.type === 'projectile' && data1?.type === 'planet')) {
-            
-            const pBody = data1.type === 'projectile' ? body1 : body2;
-            pendingDestruction.push(() => this.handleProjectileHitPlanet(pBody));
-        }
-        
-        // 3. Projectile vs Projectile
-        else if (data1?.type === 'projectile' && data2?.type === 'projectile') {
-            pendingDestruction.push(() => this.handleProjectileHitProjectile(body1, body2));
-        }
-
-        // 4. Turret vs Planet (Landing)
-        else if ((data1?.type === 'turret' && data2?.type === 'planet') || 
-                 (data2?.type === 'turret' && data1?.type === 'planet')) {
-            
-            const tBody = data1.type === 'turret' ? body1 : body2;
-            const pBody = data1.type === 'planet' ? body1 : body2;
-            
-            const turret = (tBody as any).userData.parent as Turret;
-            const planet = (pBody as any).userData.parent as Planet;
-
-            if (turret && turret.isFalling) {
-                // Check if we should land
-                const tVel = (tBody as RAPIER.RigidBody).linvel();
-                const dx = turret.position.x - planet.position.x;
-                const dy = turret.position.y - planet.position.y;
-                
-                // Dot product: > 0 means moving away (jumping), < 0 means moving towards (falling)
-                const dot = tVel.x * dx + tVel.y * dy;
-                const speedSq = tVel.x * tVel.x + tVel.y * tVel.y;
-                
-                // Only land if falling towards planet OR moving very slowly (settled)
-                if (dot < 0 || speedSq < 1.0) {
-                     turret.setFalling(false);
-                     
-                     // Align rotation to gravity/surface normal
-                     const angle = Math.atan2(dy, dx);
-                     tBody.setRotation(angle, true);
-                }
-            }
-        }
-    });
-
-    // Execute pending destructions
-    pendingDestruction.forEach(fn => fn());
+    if (shouldStep) { // Logic optimization: Only check collisions if we stepped physics?
+        this.collisionManager.update();
+    }
+    // Actually collision events are queued by Rapier step, so we should check them if we stepped.
+    // However, if we didn't step, could there be events? No.
+    
     
     // Prediction handling during PLANNING
     if (this.turnManager.currentPhase === TurnPhase.PLANNING) {
@@ -341,223 +270,11 @@ export class MainScene extends Phaser.Scene {
     }
   }
 
-  private handleProjectileHitTurret(projectileBody: any, turretBody: any) {
-      const projParams = projectileBody.userData;
-      const projectileVisual = projParams.visual as Projectile;
-      
-      if (projectileVisual) {
-          // Visuals
-          const team = this.teamManager.getTeam(projectileVisual.teamId || '');
-          const color = team ? team.color : 0xffffff;
-          this.createExplosion(projectileVisual.x, projectileVisual.y, color);
-
-          // Apply Radial Damage
-          const stats = PROJECTILE_DATA[projectileVisual.projectileType];
-          const radius = stats ? stats.explosionRadius : 15;
-          const damage = projectileVisual.damage; 
-          
-          this.applyRadialDamage(projectileVisual.x, projectileVisual.y, radius, damage);
-
-          // Determine location for ground damage
-          // Default to projectile position
-          let shockX = projectileVisual.x;
-          let shockY = projectileVisual.y;
-
-          // Try to use turret position if available (ensures ground hit)
-          const targetTurret = turretBody.userData?.parent as Turret;
-          if (targetTurret && targetTurret.position) {
-               shockX = targetTurret.position.x;
-               shockY = targetTurret.position.y;
-          }
-
-          // Also damage the ground (Planet) explicitly
-          let closestPlanet: Planet | null = null;
-          let minDist = Infinity;
-          for (const planet of this.planets) {
-              const dist = Phaser.Math.Distance.Between(shockX, shockY, planet.position.x, planet.position.y);
-              if (dist < minDist) {
-                  minDist = dist;
-                  closestPlanet = planet;
-              }
-          }
-          
-          if (closestPlanet) {
-              closestPlanet.takeDamage(shockX, shockY, radius);
-          }
-
-          projectileVisual.destroy();
-          this.removeProjectile(projectileVisual);
-      }
-  }
-
-  private handleProjectileHitPlanet(projectileBody: any) {
-      const projParams = projectileBody.userData;
-      const projectileVisual = projParams.visual as Projectile;
-      
-      if (projectileVisual) {
-          const team = this.teamManager.getTeam(projectileVisual.teamId || '');
-          const color = team ? team.color : 0xffffff;
-          
-          // Use FX Manager for visual explosion
-          FXManager.getInstance().createExplosion(projectileVisual.x, projectileVisual.y, color);
-          
-          // Check if we hit a planet
-          const hitPlanet = this.planets.find(p => p.id === (projectileBody?.userData?.parent as Planet)?.id) || 
-                            this.planets.find(p => Phaser.Math.Distance.Between(projectileVisual.x, projectileVisual.y, p.position.x, p.position.y) < p.radiusValue + 20); // Fallback
-
-          if (hitPlanet) {
-              const stats = PROJECTILE_DATA[projectileVisual.projectileType];
-              const radius = stats ? stats.explosionRadius : 15;
-              
-              if (radius > 0) {
-                 hitPlanet.takeDamage(projectileVisual.x, projectileVisual.y, radius);
-                 // Apply Radial Damage to nearby turrets
-                 this.applyRadialDamage(projectileVisual.x, projectileVisual.y, radius, projectileVisual.damage);
-              }
-          }
-
-          // Colonizer Effect
-          if (projectileVisual.projectileType === ProjectileType.COLONIZER && hitPlanet) {
-              // Calculate angle from planet center to impact point
-              const angle = Math.atan2(projectileVisual.y - hitPlanet.position.y, projectileVisual.x - hitPlanet.position.x);
-              hitPlanet.addTurretAtAngle(angle, projectileVisual.teamId);
-          }
-
-          projectileVisual.destroy();
-          this.removeProjectile(projectileVisual);
-      }
-  }
-
-  private handleProjectileHitProjectile(body1: any, body2: any) {
-      const p1 = body1.userData.visual as Projectile;
-      const p2 = body2.userData.visual as Projectile;
-      
-      if (p1) {
-          const team = this.teamManager.getTeam(p1.teamId || '');
-          const color = team ? team.color : 0xffffff;
-          this.createExplosion(p1.x, p1.y, color);
-          
-          const stats = PROJECTILE_DATA[p1.projectileType];
-          this.applyRadialDamage(p1.x, p1.y, stats.explosionRadius, p1.damage);
-
-          p1.destroy();
-          this.removeProjectile(p1);
-      }
-      if (p2) {
-          const team = this.teamManager.getTeam(p2.teamId || '');
-          const color = team ? team.color : 0xffffff;
-          this.createExplosion(p2.x, p2.y, color);
-
-          const stats = PROJECTILE_DATA[p2.projectileType];
-          this.applyRadialDamage(p2.x, p2.y, stats.explosionRadius, p2.damage); // P2 also explodes? Double damage? Should probably only one explode?
-          // Consistency: both explode.
-
-          p2.destroy();
-          this.removeProjectile(p2);
-      }
-  }
-
-  private applyRadialDamage(x: number, y: number, radius: number, maxDamage: number) {
-        if (maxDamage <= 0 || radius <= 0) return;
-
-        const toDestroy: { turret: Turret, planet: Planet }[] = [];
-
-        this.planets.forEach(planet => {
-             planet.turretsList.forEach(turret => {
-                const dist = Phaser.Math.Distance.Between(x, y, turret.position.x, turret.position.y);
-                if (dist <= radius) {
-                    // Linear falloff: Max at 0, 0 at radius
-                    const damage = Math.floor(maxDamage * (1 - dist / radius));
-                    if (damage > 0) {
-                        const destroyed = turret.takeDamage(damage);
-                        
-                        // Apply Kinetic Blast Impulse
-                        // Make sure turret is dynamic (falling) if it survives but gets hit hard?
-                        // If we want it to fly off, it MUST be set to falling (dynamic)
-                        // Threshold for "blasting off": if damage > 10% of max health? 
-                        // Or just always if near? if dist/radius < 0.5?
-                        
-                        // For now, let's say if it takes ANY damage from an explosion, and the ground is somewhat shaky, we might knock it loose.
-                        // But strictly: if the ground is destroyed, it falls.
-                        // "Blasted off" implies it flies UP or AWAY.
-                        
-                        // If we want "Blasted off", we should force it to fall (Dynamic) and apply impulse.
-                        // But we only want this if the ground is NOT supporting it effectively?
-                        // Or if the blast is strong enough to rip it off the foundation.
-                        
-                        // Let's implement: If damage > 20, force fall and apply impulse.
-                        if (damage > 20 && !turret.isFalling) {
-                             turret.setFalling(true);
-                        }
-
-                        if (turret.isFalling) {
-                             // Apply Impulse away from explosion
-                             const angle = Math.atan2(turret.position.y - y, turret.position.x - x);
-                             const force = 5 * turret.getMass(); // Tune this!
-                             const ix = Math.cos(angle) * force;
-                             const iy = Math.sin(angle) * force;
-                             turret.applyForce(ix, iy); // applyForce uses applyImpulse with scaling?
-                             
-                             // Turret.applyForce scales by 0.016. so we need to compensate or fix Turret.applyForce.
-                             // Proj.applyForce uses addForce? No, applyImpulse.
-                             
-                             // Let's bypass Turret.applyForce and use body directly if we want pure impulse control?
-                             // Or fix Turret.applyForce to NOT scale if we mean impulse?
-                             // GravitySystem sends Force. Turret.applyForce converts F -> Impulse for dt=0.016.
-                             // Here we want Impulse.
-                             // So if we assume applyForce expects Force, then Impulse = F * dt.
-                             // We want to deliver specific Impulse J.
-                             // So F = J / dt.
-                             // So pass J / 0.016 to applyForce.
-                             
-                             const dt = 0.016;
-                             turret.applyForce(ix / dt, iy / dt);
-                        }
-
-                        if (destroyed) {
-                            toDestroy.push({ turret, planet });
-                        }
-                    }
-                }
-            });
-        });
-
-        toDestroy.forEach(({ turret, planet }) => {
-              const tIndex = planet.turretsList.indexOf(turret);
-              if (tIndex > -1) {
-                  planet.turretsList.splice(tIndex, 1);
-                  const tx = turret.position.x;
-                  const ty = turret.position.y;
-                  turret.destroy();
-                  this.createExplosion(tx, ty, 0xffaa00, 30);
-              }
-        });
-  }
-  
-  private createExplosion(x: number, y: number, color: number, radius: number = 15) {
-      // Visual Explosion (Sprite)
-      const circle = this.add.image(x, y, 'particle');
-      circle.setTint(color);
-      circle.setDepth(2000);
-      
-      const targetScale = radius / 4; // Base 8x8 -> radius 4. 
-      circle.setScale(0.1);
-
-      this.tweens.add({
-          targets: circle,
-          scale: targetScale,
-          alpha: 0,
-          duration: 300,
-          onComplete: () => circle.destroy()
-      });
-  }
-  
-  private removeProjectile(p: Projectile) {
+  // Helper needed for managers
+  public removeProjectile(p: Projectile) {
         const pIndex = this.projectiles.indexOf(p);
         if (pIndex > -1) this.projectiles.splice(pIndex, 1);
   }
-
-
   
   public fireProjectiles() {
        this.planets.forEach(p => {
@@ -600,77 +317,6 @@ export class MainScene extends Phaser.Scene {
              }
          });
      });
-  }
-
-
-
-
-
-  private generateTextures() {
-      // 1. Projectile (16x16 Yellow Circle)
-      if (!this.textures.exists('projectile')) {
-          const g = this.make.graphics({ x: 0, y: 0 });
-          g.fillStyle(0xffff00);
-          g.fillCircle(8, 8, 5);
-          g.generateTexture('projectile', 16, 16);
-          g.destroy();
-      }
-
-      // 2. Ship (32x32 Green Triangle)
-      if (!this.textures.exists('ship')) {
-          const g = this.make.graphics({ x: 0, y: 0 });
-          g.lineStyle(2, 0x00ff00);
-          g.fillStyle(0x000000);
-          
-          g.beginPath();
-          g.moveTo(16, 6);   // Top (shifted relative to center)
-          g.lineTo(24, 26);  // Bottom Right
-          g.lineTo(16, 22);  // Bottom Center (notch)
-          g.lineTo(8, 26);   // Bottom Left
-          g.closePath();
-          
-          g.fillPath();
-          g.strokePath();
-          
-          g.generateTexture('ship', 32, 32);
-          g.destroy();
-      }
-
-      // 3. Turret Base (32x32 White Box)
-      if (!this.textures.exists('turret_base')) {
-          const g = this.make.graphics({ x: 0, y: 0 });
-          g.fillStyle(0xffffff);
-          g.fillRect(6, 6, 20, 20);
-          g.generateTexture('turret_base', 32, 32);
-          g.destroy();
-      }
-
-      // 4. Debris (16x16 Grey Circle)
-      if (!this.textures.exists('debris')) {
-          const g = this.make.graphics({ x: 0, y: 0 });
-          g.fillStyle(0x888888);
-          g.fillCircle(8, 8, 5);
-          g.generateTexture('debris', 16, 16);
-          g.destroy();
-      }
-
-      // 5. Particle (8x8 White Circle)
-      if (!this.textures.exists('particle')) {
-          const g = this.make.graphics({ x: 0, y: 0 });
-          g.fillStyle(0xffffff);
-          g.fillCircle(4, 4, 3);
-          g.generateTexture('particle', 8, 8);
-          g.destroy();
-      }
-
-      // 6. 1x1 White Pixel
-      if (!this.textures.exists('white_1x1')) {
-          const g = this.make.graphics({ x: 0, y: 0 });
-          g.fillStyle(0xffffff);
-          g.fillRect(0, 0, 1, 1);
-          g.generateTexture('white_1x1', 1, 1);
-          g.destroy();
-      }
   }
 
   private applyAPAccumulation() {

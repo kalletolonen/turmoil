@@ -27,7 +27,7 @@ describe('UIManager', () => {
         mockScene = {
             add: {
                 container: vi.fn().mockReturnValue(mockContainer),
-                image: vi.fn().mockReturnValue({ setDisplaySize: vi.fn(), setTint: vi.fn(), setAlpha: vi.fn(), setInteractive: vi.fn(), on: vi.fn(), setName: vi.fn() }),
+                image: vi.fn().mockReturnValue({ setDisplaySize: vi.fn(), setTint: vi.fn(), setAlpha: vi.fn(), setInteractive: vi.fn(), on: vi.fn(), setName: vi.fn(), setData: vi.fn().mockReturnThis() }),
                 text: vi.fn().mockReturnValue({ setOrigin: vi.fn() })
             },
             scale: { width: 800, height: 600 },

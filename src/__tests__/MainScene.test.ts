@@ -93,6 +93,7 @@ vi.mock('phaser', () => {
                     setAlpha: vi.fn().mockReturnThis(),
                     setInteractive: vi.fn().mockReturnThis(),
                     setName: vi.fn().mockReturnThis(),
+                    setData: vi.fn().mockReturnThis(),
                     on: vi.fn().mockReturnThis(),
                     setOrigin: vi.fn().mockReturnThis(),
                     setScrollFactor: vi.fn().mockReturnThis(),
@@ -217,6 +218,20 @@ vi.mock('../physics/RapierManager', () => {
     };
 });
 
+// Mock FXManager (Added)
+vi.mock('../logic/FXManager', () => ({
+    FXManager: {
+        getInstance: vi.fn(() => ({
+            createExplosion: vi.fn(),
+            createDebrisBurst: vi.fn(),
+            update: vi.fn(),
+            showFloatingText: vi.fn(),
+            createThrustEffect: vi.fn()
+        })),
+        init: vi.fn()
+    }
+}));
+
 // 4. Mock @dimforge/rapier2d-compat
 vi.mock('@dimforge/rapier2d-compat', () => {
     const rigidBodyDescMock = {
@@ -251,6 +266,12 @@ vi.mock('@dimforge/rapier2d-compat', () => {
                 setRestitution: vi.fn().mockReturnThis(),
                 setFriction: vi.fn().mockReturnThis(),
                 setDensity: vi.fn().mockReturnThis()
+            })),
+            triangle: vi.fn(() => ({ 
+                setActiveEvents: vi.fn().mockReturnThis(),
+                setRestitution: vi.fn().mockReturnThis(),
+                setFriction: vi.fn().mockReturnThis(),
+                setDensity: vi.fn().mockReturnThis()
             }))
         },
         ActiveEvents: { COLLISION_EVENTS: 1 },
@@ -273,6 +294,12 @@ vi.mock('@dimforge/rapier2d-compat', () => {
                     setDensity: vi.fn().mockReturnThis()
                 })),
                 polyline: vi.fn(() => ({ 
+                    setActiveEvents: vi.fn().mockReturnThis(),
+                    setRestitution: vi.fn().mockReturnThis(),
+                    setFriction: vi.fn().mockReturnThis(),
+                    setDensity: vi.fn().mockReturnThis()
+                })),
+                triangle: vi.fn(() => ({ 
                     setActiveEvents: vi.fn().mockReturnThis(),
                     setRestitution: vi.fn().mockReturnThis(),
                     setFriction: vi.fn().mockReturnThis(),

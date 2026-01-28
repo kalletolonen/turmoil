@@ -149,7 +149,8 @@ vi.mock('@dimforge/rapier2d-compat', () => {
             ColliderDesc: {
                 cuboid: vi.fn(() => new MockDesc()),
                 ball: vi.fn(() => new MockDesc()),
-                polyline: vi.fn(() => new MockDesc())
+                polyline: vi.fn(() => new MockDesc()),
+                triangle: vi.fn(() => new MockDesc())
             },
             ActiveEvents: { COLLISION_EVENTS: 0 }
         },
@@ -160,7 +161,8 @@ vi.mock('@dimforge/rapier2d-compat', () => {
         ColliderDesc: {
             cuboid: vi.fn(() => new MockDesc()),
             ball: vi.fn(() => new MockDesc()),
-            polyline: vi.fn(() => new MockDesc())
+            polyline: vi.fn(() => new MockDesc()),
+            triangle: vi.fn(() => new MockDesc())
         },
         ActiveEvents: { COLLISION_EVENTS: 0 }
     };
