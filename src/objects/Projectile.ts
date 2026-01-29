@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { RapierManager } from '../physics/RapierManager';
 import RAPIER from '@dimforge/rapier2d-compat';
 import { ProjectileType, PROJECTILE_DATA } from './ProjectileTypes';
+import { INTERACTION_PROJECTILE } from '../physics/PhysicsGroups';
 
 export class Projectile extends Phaser.GameObjects.Sprite {
     private bodyId: RAPIER.RigidBody;
@@ -47,6 +48,8 @@ export class Projectile extends Phaser.GameObjects.Sprite {
             .setLinvel(Math.cos(angle) * velocity, Math.sin(angle) * velocity)
             .setCcdEnabled(true); // Continuous collision detection for fast objects
 
+
+
         this.bodyId = this.world.createRigidBody(bodyDesc);
         (this.bodyId as any).userData = { type: 'projectile', visual: this };
 
@@ -60,6 +63,8 @@ export class Projectile extends Phaser.GameObjects.Sprite {
         colliderDesc.setDensity(1.0 / (Math.PI * 25));
         colliderDesc.setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
         
+        colliderDesc.setCollisionGroups(INTERACTION_PROJECTILE);
+
         this.world.createCollider(colliderDesc, this.bodyId);
     }
 
@@ -161,9 +166,9 @@ export class Projectile extends Phaser.GameObjects.Sprite {
         }
 
         // Cleanup if out of bounds (simple check)
-        // if (translation.x < -100 || translation.x > 2000 || translation.y < -100 || translation.y > 2000) {
-        //    this.destroy();
-        // }
+        if (translation.x < -2000 || translation.x > 4000 || translation.y < -2000 || translation.y > 4000) {
+           this.destroy();
+        }
     }
     
     destroy(fromScene?: boolean) {

@@ -198,7 +198,8 @@ const mockRapierInstance = {
              rotation: vi.fn(() => 0),
              numColliders: vi.fn().mockReturnValue(0),
              collider: vi.fn(),
-             userData: {}
+             userData: {},
+             isValid: vi.fn().mockReturnValue(true)
         })),
         createCollider: vi.fn(),
         removeCollider: vi.fn(),
@@ -316,7 +317,14 @@ vi.mock('@dimforge/rapier2d-compat', () => {
                     translation: vi.fn().mockReturnValue({ x: 0, y: 0 }),
                     rotation: vi.fn().mockReturnValue(0),
                     addForce: vi.fn(),
-                    next: vi.fn()
+                    next: vi.fn(),
+                    isValid: vi.fn().mockReturnValue(true),
+                    setBodyType: vi.fn(),
+                    wakeUp: vi.fn(),
+                    setLinvel: vi.fn(),
+                    setAngvel: vi.fn(),
+                    applyImpulse: vi.fn(),
+                    mass: vi.fn().mockReturnValue(100)
                 }));
                 createCollider = vi.fn();
                 removeCollider = vi.fn();

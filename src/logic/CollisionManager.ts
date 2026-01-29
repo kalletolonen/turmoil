@@ -113,9 +113,7 @@ export class CollisionManager {
           const radius = stats ? stats.explosionRadius : 15;
           const damage = projectileVisual.damage; 
           
-          this.combatManager.applyRadialDamage(projectileVisual.x, projectileVisual.y, radius, damage, this.getPlanets());
-
-          // Determine location for ground damage
+          // Determine location for ground damage and target turret
           let shockX = projectileVisual.x;
           let shockY = projectileVisual.y;
 
@@ -124,6 +122,9 @@ export class CollisionManager {
                shockX = targetTurret.position.x;
                shockY = targetTurret.position.y;
           }
+           
+          // Apply damage AFTER getting position, in case turret gets destroyed
+          this.combatManager.applyRadialDamage(projectileVisual.x, projectileVisual.y, radius, damage, this.getPlanets());
 
           // Also damage the ground (Planet) explicitly
           let closestPlanet: Planet | null = null;
@@ -154,15 +155,17 @@ export class CollisionManager {
           const team = this.teamManager.getTeam(projectileVisual.teamId || '');
           const color = team ? team.color : 0xffffff;
           
-          FXManager.getInstance().createExplosion(projectileVisual.x, projectileVisual.y, color);
+          const stats = PROJECTILE_DATA[projectileVisual.projectileType];
+          const radius = stats ? stats.explosionRadius : 15;
+
+          if (radius > 0) {
+              FXManager.getInstance().createExplosion(projectileVisual.x, projectileVisual.y, color);
+          }
           
           const hitPlanet = planets.find(p => p.id === (projectileBody?.userData?.parent as Planet)?.id) || 
                             planets.find(p => Phaser.Math.Distance.Between(projectileVisual.x, projectileVisual.y, p.position.x, p.position.y) < p.radiusValue + 20); 
 
           if (hitPlanet) {
-              const stats = PROJECTILE_DATA[projectileVisual.projectileType];
-              const radius = stats ? stats.explosionRadius : 15;
-              
               if (radius > 0) {
                  hitPlanet.takeDamage(projectileVisual.x, projectileVisual.y, radius);
                  this.combatManager.applyRadialDamage(projectileVisual.x, projectileVisual.y, radius, projectileVisual.damage, planets);

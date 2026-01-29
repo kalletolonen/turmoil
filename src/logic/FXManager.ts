@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { RapierManager } from '../physics/RapierManager';
 import RAPIER from '@dimforge/rapier2d-compat';
+import { INTERACTION_DEBRIS } from '../physics/PhysicsGroups';
 
 export class FXManager {
     private static instance: FXManager;
@@ -98,7 +99,8 @@ export class FXManager {
             
             const colliderDesc = RAPIER.ColliderDesc.cuboid(size / 2, size / 2)
                  .setDensity(0.5)
-                 .setRestitution(0.5); // Bouncy
+                 .setRestitution(0.5) // Bouncy
+                 .setCollisionGroups(INTERACTION_DEBRIS);
             
             rapierManager.world.createCollider(colliderDesc, body);
             

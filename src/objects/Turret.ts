@@ -220,11 +220,17 @@ export class Turret {
     }
     
     public get position(): { x: number, y: number } {
-        return this.body.translation();
+        if (this.body && this.body.isValid()) {
+            return this.body.translation();
+        }
+        return { x: this.visual.x, y: this.visual.y };
     }
     
     public get rotation(): number {
-        return this.body.rotation();
+        if (this.body && this.body.isValid()) {
+            return this.body.rotation();
+        }
+        return this.visual.rotation;
     }
 
     private selectionBracket: Phaser.GameObjects.Graphics;
@@ -310,6 +316,8 @@ export class Turret {
         const rapierManager = RapierManager.getInstance();
         if (rapierManager.world && this.body) {
             rapierManager.world.removeRigidBody(this.body);
+            // @ts-ignore
+            this.body = null;
         }
     }
 }

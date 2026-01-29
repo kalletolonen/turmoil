@@ -147,8 +147,11 @@ export class MainScene extends Phaser.Scene {
             // User requested "omit faction energy". So we should ignore resources.
             // But AI might use it? Assuming I need to check AI logic separately.
             
-            this.projectiles.forEach(p => p.destroy());
-            this.projectiles = [];
+            // this.projectiles.forEach(p => p.destroy());
+            // this.projectiles = [];
+            
+            // We want to KEEP the graphics (trajectories) or clear them? 
+            // Usually we want to clear old trajectories, but keep the projectiles.
             this.graphics.clear();
 
             // AP Accumulation Phase
