@@ -107,11 +107,13 @@ export class CollisionManager {
       if (projectileVisual) {
           const team = this.teamManager.getTeam(projectileVisual.teamId || '');
           const color = team ? team.color : 0xffffff;
-          this.combatManager.createExplosion(projectileVisual.x, projectileVisual.y, color);
-
           const stats = PROJECTILE_DATA[projectileVisual.projectileType];
           const radius = stats ? stats.explosionRadius : 15;
           const damage = projectileVisual.damage; 
+          
+          if (radius > 0) {
+              this.combatManager.createExplosion(projectileVisual.x, projectileVisual.y, color);
+          } 
           
           // Determine location for ground damage and target turret
           let shockX = projectileVisual.x;
@@ -190,9 +192,11 @@ export class CollisionManager {
       if (p1) {
           const team = this.teamManager.getTeam(p1.teamId || '');
           const color = team ? team.color : 0xffffff;
-          this.combatManager.createExplosion(p1.x, p1.y, color);
           
           const stats = PROJECTILE_DATA[p1.projectileType];
+          if (stats.explosionRadius > 0) {
+              this.combatManager.createExplosion(p1.x, p1.y, color);
+          }
           this.combatManager.applyRadialDamage(p1.x, p1.y, stats.explosionRadius, p1.damage, planets);
 
           p1.destroy();
@@ -201,9 +205,11 @@ export class CollisionManager {
       if (p2) {
           const team = this.teamManager.getTeam(p2.teamId || '');
           const color = team ? team.color : 0xffffff;
-          this.combatManager.createExplosion(p2.x, p2.y, color);
-
+          
           const stats = PROJECTILE_DATA[p2.projectileType];
+          if (stats.explosionRadius > 0) {
+              this.combatManager.createExplosion(p2.x, p2.y, color);
+          }
           this.combatManager.applyRadialDamage(p2.x, p2.y, stats.explosionRadius, p2.damage, planets);
 
           p2.destroy();

@@ -55,26 +55,37 @@ export class FXManager {
     }
 
     public createExplosion(x: number, y: number, color: number, size: number = 20) {
-        // Visual Explosion (Sprite)
-        const circle = this.scene.add.image(x, y, 'particle');
-        circle.setTint(color);
+        // Subtle/Distinctive: Expanding Ring Shockwave (Hollow)
+        const graphics = this.scene.add.graphics({ x, y });
         
-        // Base size is 8x8. We want radius 'size'. Diameter = size*2.
-        // Scale = (size * 2) / 8 => size / 4
-        const targetScale = size / 4;
+        // Draw circle at 0,0 (local to graphics)
+        // We'll scale the graphics object itself
+        const thickness = 2;
+        graphics.lineStyle(thickness, color);
+        graphics.strokeCircle(0, 0, size / 2); // Base size
         
-        circle.setScale(0.1); // Start small
+        graphics.setScale(0.1); // Start small
+        graphics.setAlpha(1);
 
         this.scene.tweens.add({
-            targets: circle,
-            scale: targetScale,
-            alpha: 0,
-            duration: 300,
-            onComplete: () => circle.destroy()
+            targets: graphics,
+            scale: 2.0, // Expand to 2x size
+            alpha: 0,   // Fade out
+            duration: 400,
+            ease: 'Quad.out',
+            onComplete: () => graphics.destroy()
         });
-
-        // Toggle standard particles if desired
-        // const emitter = this.scene.add.particles(x, y, 'texture', { ... });
+        
+        // Optional: Small central point that vanishes quickly
+        const center = this.scene.add.image(x, y, 'particle');
+        center.setTint(color);
+        center.setScale(0.2);
+        this.scene.tweens.add({
+            targets: center,
+            scale: 0,
+            duration: 150,
+            onComplete: () => center.destroy()
+        });
     }
 
     public createDebrisBurst(x: number, y: number, color: number, count: number = 5) {

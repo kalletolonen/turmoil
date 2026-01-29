@@ -64,27 +64,6 @@ export class CombatManager {
   }
 
   public createExplosion(x: number, y: number, color: number, radius: number = 15) {
-      // Use FXManager if possible, but here we copied the manual one from MainScene.
-      // Ideally we unify. MainScene used BOTH FXManager AND manual tweens.
-      // Let's standardise on a simple visual explosion here that mimics the old one.
-      
-      const circle = this.scene.add.image(x, y, 'particle');
-      circle.setTint(color);
-      circle.setDepth(2000);
-      
-      const targetScale = radius / 4; 
-      circle.setScale(0.1);
-
-      this.scene.tweens.add({
-          targets: circle,
-          scale: targetScale,
-          alpha: 0,
-          duration: 300,
-          onComplete: () => circle.destroy()
-      });
-      
-      // Also trigger FXManager particle explosion if desired?
-      // FXManager.getInstance().createExplosion(...) is probably better?
-      // The original code did BOTH in some places (handleProjectileHitPlanet).
+      FXManager.getInstance().createExplosion(x, y, color, radius);
   }
 }
