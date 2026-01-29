@@ -233,7 +233,7 @@ export class MainScene extends Phaser.Scene {
         }
 
         this.rapierManager.step();
-        this.projectiles.forEach(p => p.update(this.planets));
+        this.projectiles.forEach(p => p.update(this.planets, this.projectiles));
     }
 
     if (this.turnManager.currentPhase === TurnPhase.PLANNING) {
@@ -248,12 +248,10 @@ export class MainScene extends Phaser.Scene {
     // Update Debris visuals
     this.debris.forEach(d => d.update());
 
-    // Update FX
-    FXManager.getInstance().update(delta);
-
     // Handle Collisions
-    if (shouldStep) { // Logic optimization: Only check collisions if we stepped physics?
+    if (shouldStep) { 
         this.collisionManager.update();
+        FXManager.getInstance().update(delta);
     }
     // Actually collision events are queued by Rapier step, so we should check them if we stepped.
     // However, if we didn't step, could there be events? No.

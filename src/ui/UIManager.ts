@@ -29,7 +29,7 @@ export class UIManager {
         bg.setAlpha(0.9);
         this.weaponUIContainer.add(bg);
         
-        const types = [ProjectileType.BASIC, ProjectileType.GIGA_BLASTER, ProjectileType.COLONIZER, ProjectileType.RADAR];
+        const types = [ProjectileType.BASIC, ProjectileType.GIGA_BLASTER, ProjectileType.COLONIZER, ProjectileType.RADAR, ProjectileType.DEFENDER];
         const spacing = 150;
         const startX = width / 2 - ((types.length - 1) * spacing) / 2;
         
@@ -90,7 +90,7 @@ export class UIManager {
  
         this.weaponUIContainer.setVisible(true);
         
-        const types = [ProjectileType.BASIC, ProjectileType.GIGA_BLASTER, ProjectileType.COLONIZER, ProjectileType.RADAR];
+        const types = [ProjectileType.BASIC, ProjectileType.GIGA_BLASTER, ProjectileType.COLONIZER, ProjectileType.RADAR, ProjectileType.DEFENDER];
         
         types.forEach(type => {
             const button = this.weaponUIContainer?.getByName(`btn_${type}`) as Phaser.GameObjects.Image;
@@ -149,36 +149,41 @@ export class UIManager {
         
         if (this.scene.selectedTurret.projectileType === newType) return;
         
-        // Handle Refund Logic (Un-equipping Old)
-        // If old type was RADAR, we DO NOT refund (Anti-Arbitrage)
-        // If old type was normal AND armed, we refund as usual.
-        // If old type was normal AND NOT armed, cost hasn't been paid yet, so no refund needed.
-        if (this.scene.selectedTurret.projectileType !== ProjectileType.RADAR) {
-             if (this.scene.selectedTurret.armed) {
-                  this.scene.selectedTurret.addActionPoints(currentStats.cost);
-                  this.scene.selectedTurret.setArmed(false);
+        const turret = this.scene.selectedTurret;
+        
+        // 1. Save AIM state
+        const wasArmed = turret.armed;
+        const savedVector = turret.aimVector;
+
+        // 2. Refund Logic (if Armed)
+        if (turret.projectileType !== ProjectileType.RADAR) {
+             if (wasArmed) {
+                  turret.addActionPoints(currentStats.cost);
+                  turret.setArmed(false);
              }
         }
         
-        // Handle Cost Logic (Equipping New)
-        // If new type is RADAR, we consume IMMEDIATELY.
-        // If new type is normal, we consume later on Arm (Drag).
-        if (newType === ProjectileType.RADAR) {
-            // Check affordability specifically here
-            if (this.scene.selectedTurret.actionPoints < newStats.cost) {
-                console.log("Not enough AP for Radar");
-                return; 
-            }
-            this.scene.selectedTurret.consumeActionPoints(newStats.cost);
-            // We set armed=false because Radar is passive, but maybe we should flag it?
-            // For now, type switch is enough.
-        } else {
-             // Normal weapons: No immediate cost.
-             // Ensure we are disarmed when switching types (handled by refund logic above usually)
-             // But if we were Radar, we are not armed, so just switch.
-        }
+        // 3. Switch Type
+        turret.projectileType = newType;
         
-        this.scene.selectedTurret.projectileType = newType;
+        // 4. Re-Arm Logic (Try to restore aim)
+        if (newType === ProjectileType.RADAR) {
+             if (turret.actionPoints >= newStats.cost) {
+                 turret.consumeActionPoints(newStats.cost);
+             } else {
+                 console.log("Not enough AP for Radar after switch");
+             }
+        } else {
+             // Normal Weapon: Check if we can afford to re-arm with saved vector
+             if (wasArmed && savedVector) {
+                 if (turret.actionPoints >= newStats.cost) {
+                     turret.consumeActionPoints(newStats.cost);
+                     turret.setArmed(true, savedVector);
+                 } else {
+                     console.log("Not enough AP to maintain shot with new weapon");
+                 }
+             }
+        }
         
         // Visual update
         this.updateWeaponSelectionUI();

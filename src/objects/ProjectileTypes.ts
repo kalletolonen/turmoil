@@ -2,7 +2,8 @@ export enum ProjectileType {
     BASIC = 'basic',
     GIGA_BLASTER = 'blaster',
     COLONIZER = 'colonizer',
-    RADAR = 'radar'
+    RADAR = 'radar',
+    DEFENDER = 'defender'
 }
 
 export interface ProjectileStats {
@@ -51,5 +52,14 @@ export const PROJECTILE_DATA: Record<ProjectileType, ProjectileStats> = {
         description: 'Reveals enemy plans',
         color: 0x00ff00, 
         explosionRadius: 0
+    },
+    [ProjectileType.DEFENDER]: {
+        type: ProjectileType.DEFENDER,
+        damage: 0,
+        cost: 2,
+        name: 'Defender',
+        description: 'Intercepts projectiles',
+        color: 0x0000ff,
+        explosionRadius: 35
     }
 };

@@ -68,13 +68,48 @@ export class Projectile extends Phaser.GameObjects.Sprite {
         this.world.createCollider(colliderDesc, this.bodyId);
     }
 
-    update(planets: import('./Planet').Planet[] = []) {
+    update(planets: import('./Planet').Planet[] = [], projectiles: Projectile[] = []) {
         if (!this.bodyId.isValid()) return;
         
         const translation = this.bodyId.translation();
         this.setPosition(translation.x, translation.y);
+
+        // Defender Logic
+        if (this.projectileType === ProjectileType.DEFENDER) {
+            const stats = PROJECTILE_DATA[this.projectileType];
+            const radius = stats.explosionRadius;
+            
+            // Find enemy projectiles in range
+            const targets = projectiles.filter(p => {
+                if (p === this) return false;
+                if (!p.bodyId || !p.bodyId.isValid()) return false;
+                
+                // Check team (intercept enemies)
+                if (this.teamId && p.teamId && this.teamId === p.teamId) return false;
+                
+                const dist = Phaser.Math.Distance.Between(translation.x, translation.y, p.position.x, p.position.y);
+                return dist <= radius;
+            });
+
+            if (targets.length > 0) {
+                 // Explode
+                 import('../logic/FXManager').then(({ FXManager }) => {
+                      FXManager.getInstance().createExplosion(translation.x, translation.y, stats.color, radius);
+                 });
+
+                 // Destroy targets
+                 targets.forEach(t => {
+                     t.destroy();
+                     if (this.scene) (this.scene as any).removeProjectile(t);
+                 });
+
+                 // Destroy self
+                 this.destroy();
+                 if (this.scene) (this.scene as any).removeProjectile(this);
+                 return;
+            }
+        }
         
-        // Colonizer Landing Logic
         // Colonizer Landing Logic
         if (this.projectileType === ProjectileType.COLONIZER && planets.length > 0) {
             // Find nearest planet
@@ -168,6 +203,7 @@ export class Projectile extends Phaser.GameObjects.Sprite {
         // Cleanup if out of bounds (simple check)
         if (translation.x < -2000 || translation.x > 4000 || translation.y < -2000 || translation.y > 4000) {
            this.destroy();
+           if (this.scene) (this.scene as any).removeProjectile(this);
         }
     }
     

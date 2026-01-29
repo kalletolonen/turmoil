@@ -139,7 +139,7 @@ export class CollisionManager {
               }
           }
           
-          if (closestPlanet) {
+          if (closestPlanet && damage > 0) {
               closestPlanet.takeDamage(shockX, shockY, radius);
           }
 
@@ -169,7 +169,9 @@ export class CollisionManager {
 
           if (hitPlanet) {
               if (radius > 0) {
-                 hitPlanet.takeDamage(projectileVisual.x, projectileVisual.y, radius);
+                 if (projectileVisual.damage > 0) {
+                     hitPlanet.takeDamage(projectileVisual.x, projectileVisual.y, radius);
+                 }
                  this.combatManager.applyRadialDamage(projectileVisual.x, projectileVisual.y, radius, projectileVisual.damage, planets);
               }
           }
