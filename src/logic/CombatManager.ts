@@ -4,7 +4,7 @@ import { Turret } from '../objects/Turret';
 import { FXManager } from './FXManager';
 
 export class CombatManager {
-  constructor(private scene: Phaser.Scene) {}
+  constructor() {}
 
   public applyRadialDamage(
     x: number, 

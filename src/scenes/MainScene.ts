@@ -64,9 +64,8 @@ export class MainScene extends Phaser.Scene {
     await this.rapierManager.init();
     
     // 2. Setup Managers
-    this.combatManager = new CombatManager(this);
+    this.combatManager = new CombatManager();
     this.collisionManager = new CollisionManager(
-        this,
         this.combatManager,
         this.teamManager,
         () => this.planets,
@@ -103,13 +102,20 @@ export class MainScene extends Phaser.Scene {
         // Spawn Planets with Overlap Prevention
         // Generate Map
         const mapGen = new MapGenerator();
+        const mapWidth = 2400;
+        const mapHeight = 1800;
+        
+        // Set Camera Bounds with Buffer
+        const buffer = 500;
+        this.cameras.main.setBounds(-buffer, -buffer, mapWidth + 2 * buffer, mapHeight + 2 * buffer);
+        
         const mapData = mapGen.generate({
-            width: 800,
-            height: 600,
-            planetCount: 6,
-            minPlanetRadius: 25,
-            maxPlanetRadius: 70,
-            padding: 120
+            width: mapWidth,
+            height: mapHeight,
+            planetCount: 12, // Increased from 6
+            minPlanetRadius: 50, // Increased from 25
+            maxPlanetRadius: 120, // Increased from 70
+            padding: 200 // Increased padding for larger planets
         }, this.rng);
 
         mapData.planets.forEach((pData) => {

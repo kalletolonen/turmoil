@@ -14,6 +14,9 @@ export class InputManager {
     
     private readonly DRAG_SPEED_SCALE = 2.0;
 
+    private isPanning: boolean = false;
+    private panStart: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
+
     constructor(scene: MainScene) {
         this.scene = scene;
     }
@@ -34,15 +37,30 @@ export class InputManager {
                  this.scene.fireProjectiles();
              }
          });
+
+         // Camera Controls (Zoom)
+         this.scene.input.on('wheel', (_pointer: Phaser.Input.Pointer, _gameObjects: any, _deltaX: number, deltaY: number, _deltaZ: number) => {
+             const zoom = this.scene.cameras.main.zoom;
+             const newZoom = Phaser.Math.Clamp(zoom - deltaY * 0.001, 0.1, 2.0);
+             this.scene.cameras.main.setZoom(newZoom);
+         });
          
-         // Drag Logic
+         // Prevent context menu
+         this.scene.game.canvas.oncontextmenu = (e) => e.preventDefault();
+         
+         // POINTER DOWN
          this.scene.input.on('pointerdown', (pointer: Phaser.Input.Pointer, currentlyOver: Phaser.GameObjects.GameObject[]) => {
-             // Check if we clicked UI
+             // 1. Check UI
              const clickedUI = currentlyOver.some(obj => obj.getData('isUI'));
              if (clickedUI) return;
 
-             if (this.scene.turnManager.currentPhase !== TurnPhase.PLANNING) return;
+             if (this.scene.turnManager.currentPhase !== TurnPhase.PLANNING) {
+                 // Even if not in planning, allow panning?
+                 this.startPan(pointer);
+                 return;
+             }
              
+             // 2. Check Turrets
              let clickedTurret: Turret | null = null;
              for (const p of this.scene.planets) {
                  for (const t of p.turretsList) {
@@ -56,6 +74,10 @@ export class InputManager {
              }
              
              if (clickedTurret) {
+                 // INTERACT WITH TURRET
+                 // Cancel any panning
+                 this.isPanning = false;
+
                  // Selection Logic
                  if (this.scene.selectedTurret && this.scene.selectedTurret !== clickedTurret) {
                      this.scene.selectedTurret.setSelected(false);
@@ -69,8 +91,6 @@ export class InputManager {
                  if (team && team.isAI) return;
      
                  // Check AP
-                 // If already armed, we allow drag (re-aiming). 
-                 // If not armed, need at least 1 AP to arm.
                  if (!clickedTurret.armed && clickedTurret.actionPoints < 1) {
                       console.log("Not enough AP");
                       return;
@@ -87,21 +107,42 @@ export class InputManager {
                  }
                  clickedTurret.setArmed(false);
              } else {
+                 // CLICKED EMPTY SPACE -> DESELECT & START PAN
                   if (this.scene.selectedTurret) {
                       this.scene.selectedTurret.setSelected(false);
                       this.scene.selectedTurret = null;
                       this.scene.uiManager.updateWeaponSelectionUI();
                   }
+                  
+                  // Start Panning
+                  this.startPan(pointer);
              }
          });
      
+         // POINTER MOVE
          this.scene.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
              if (this.draggingTurret) {
                  this.dragCurrentPos?.set(pointer.worldX, pointer.worldY);
+             } else if (this.isPanning) {
+                 // Pan Logic
+                 const currentPos = new Phaser.Math.Vector2(pointer.x, pointer.y);
+                 const diff = this.panStart.clone().subtract(currentPos);
+                 
+                 // Adjust for zoom
+                 diff.scale(1 / this.scene.cameras.main.zoom);
+                 
+                 this.scene.cameras.main.scrollX += diff.x;
+                 this.scene.cameras.main.scrollY += diff.y;
+                 
+                 // Reset start for next frame (delta movement)
+                 this.panStart.set(pointer.x, pointer.y);
              }
          });
      
+         // POINTER UP
          this.scene.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+             this.isPanning = false;
+
              if (this.draggingTurret && this.dragStartPos && this.dragCurrentPos) {
                  const start = this.draggingTurret.position;
                  const end = { x: pointer.worldX, y: pointer.worldY };
@@ -114,41 +155,14 @@ export class InputManager {
                       const stats = PROJECTILE_DATA[this.draggingTurret.projectileType];
                       const cost = stats.cost;
      
-                      if (this.draggingTurret.armed) {
-                          // Should not happen with new refund logic in pointerdown, but for safety:
-                          const vx = dx * this.DRAG_SPEED_SCALE;
-                          const vy = dy * this.DRAG_SPEED_SCALE;
-                          
-                          let finalVx = vx;
-                          let finalVy = vy;
-                          
-                            const currentSpeed = Math.sqrt(vx*vx + vy*vy);
-                          if (currentSpeed > GameConfig.MAX_PROJECTILE_SPEED) {
-                              const scale = GameConfig.MAX_PROJECTILE_SPEED / currentSpeed;
-                              finalVx *= scale;
-                              finalVy *= scale;
-                          }
-     
-                          this.draggingTurret.setArmed(true, { x: finalVx, y: finalVy });
+                      if (this.draggingTurret.armed) { // Should be false here usually
+                          // Safety fallback
+                          this.calculateAndArm(dx, dy);
                       } else {
                           // Try to arm
                           if (this.draggingTurret.actionPoints >= cost) {
                               this.draggingTurret.consumeActionPoints(cost);
-                              
-                              const vx = dx * this.DRAG_SPEED_SCALE;
-                              const vy = dy * this.DRAG_SPEED_SCALE;
-                              
-                              let finalVx = vx;
-                              let finalVy = vy;
-     
-                              const currentSpeed = Math.sqrt(vx*vx + vy*vy);
-                              if (currentSpeed > GameConfig.MAX_PROJECTILE_SPEED) {
-                                  const scale = GameConfig.MAX_PROJECTILE_SPEED / currentSpeed;
-                                  finalVx *= scale;
-                                  finalVy *= scale;
-                              }
-     
-                              this.draggingTurret.setArmed(true, { x: finalVx, y: finalVy });
+                              this.calculateAndArm(dx, dy);
                           } else {
                               console.log("Not enough energy!");
                               this.scene.tweens.add({
@@ -162,8 +176,9 @@ export class InputManager {
                           }
                       }
                  } else {
+                      // Cancel Drag (Click?)
                       if (this.draggingTurret.armed) {
-                          // Refund AP
+                          // Refund AP (Shouldn't happen with new logic but safe to keep)
                           const stats = PROJECTILE_DATA[this.draggingTurret.projectileType];
                           this.draggingTurret.addActionPoints(stats.cost);
                       }
@@ -175,5 +190,29 @@ export class InputManager {
                  this.dragCurrentPos = null;
              }
          });
+    }
+
+    private startPan(pointer: Phaser.Input.Pointer) {
+        this.isPanning = true;
+        this.panStart.set(pointer.x, pointer.y);
+    }
+
+    private calculateAndArm(dx: number, dy: number) {
+        if (!this.draggingTurret) return;
+
+        const vx = dx * this.DRAG_SPEED_SCALE;
+        const vy = dy * this.DRAG_SPEED_SCALE;
+        
+        let finalVx = vx;
+        let finalVy = vy;
+
+        const currentSpeed = Math.sqrt(vx*vx + vy*vy);
+        if (currentSpeed > GameConfig.MAX_PROJECTILE_SPEED) {
+            const scale = GameConfig.MAX_PROJECTILE_SPEED / currentSpeed;
+            finalVx *= scale;
+            finalVy *= scale;
+        }
+
+        this.draggingTurret.setArmed(true, { x: finalVx, y: finalVy });
     }
 }

@@ -27,70 +27,78 @@ export class MapGenerator {
     
     public generate(config: MapConfig, rng: SeededRNG): MapData {
         const planets: PlanetData[] = [];
-        const cells: { x: number, y: number, width: number, height: number }[] = [];
+        const MAX_ATTEMPTS = 50;
 
-        // Grid-based Candidate Generation
-        const cols = Math.ceil(Math.sqrt(config.planetCount * 1.5));
-        const rows = Math.ceil(config.planetCount * 1.5 / cols);
-        
-        const cellW = config.width / cols;
-        const cellH = config.height / rows;
+        for (let i = 0; i < config.planetCount; i++) {
+            let placed = false;
+            let attempts = 0;
 
-        for (let r = 0; r < rows; r++) {
-            for (let c = 0; c < cols; c++) {
-                cells.push({
-                    x: c * cellW,
-                    y: r * cellH,
-                    width: cellW,
-                    height: cellH
-                });
-            }
-        }
+            while (!placed && attempts < MAX_ATTEMPTS) {
+                attempts++;
+                
+                const radius = rng.nextRange(config.minPlanetRadius, config.maxPlanetRadius);
+                
+                // Random position within bounds, respecting padding/radius
+                // Let's use radius + small margin from edge, say 50px
+                const edgeBuffer = radius + 50; 
+                
+                const minX = edgeBuffer;
+                const maxX = config.width - edgeBuffer;
+                const minY = edgeBuffer;
+                const maxY = config.height - edgeBuffer;
 
-        // Shuffle cells
-        rng.shuffle(cells);
-
-        // Pick needed count
-        const selectedCells = cells.slice(0, config.planetCount);
-
-        for (const cell of selectedCells) {
-            const radius = rng.nextRange(config.minPlanetRadius, config.maxPlanetRadius);
-            
-            const safePadding = config.padding / 2;
-            const minX = cell.x + radius + safePadding;
-            const maxX = cell.x + cell.width - radius - safePadding;
-            const minY = cell.y + radius + safePadding;
-            const maxY = cell.y + cell.height - radius - safePadding;
-
-            let x, y;
-            if (minX >= maxX) x = cell.x + cell.width / 2;
-            else x = rng.nextRange(minX, maxX);
-
-            if (minY >= maxY) y = cell.y + cell.height / 2;
-            else y = rng.nextRange(minY, maxY);
-            
-            // Determine Team & Properties
-            const isNaturalNeutral = rng.nextFloat() < 0.3;
-            let teamId: string | null = null;
-            let color = 0x888888;
-            let turretCount = 0;
-
-            if (!isNaturalNeutral) {
-                if (x < config.width / 2) {
-                    teamId = 'red';
-                } else {
-                    teamId = 'green';
+                if (minX >= maxX || minY >= maxY) {
+                     // Config error or map too small
+                     console.warn("Map too small for planet size configuration");
+                     continue; 
                 }
-                turretCount = rng.nextInt(2, 6);
-            } else {
-                color = 0x666666;
+
+                const x = rng.nextRange(minX, maxX);
+                const y = rng.nextRange(minY, maxY);
+
+                // Check Overlap
+                let overlap = false;
+                for (const existing of planets) {
+                    const dist = Math.sqrt(Math.pow(x - existing.x, 2) + Math.pow(y - existing.y, 2));
+                    const requiredDist = radius + existing.radius + config.padding;
+                    
+                    if (dist < requiredDist) {
+                        overlap = true;
+                        break;
+                    }
+                }
+
+                if (!overlap) {
+                    // Valid Position
+                     // Determine Team & Properties
+                    const isNaturalNeutral = rng.nextFloat() < 0.3;
+                    let teamId: string | null = null;
+                    let color = 0x888888;
+                    let turretCount = 0;
+
+                    if (!isNaturalNeutral) {
+                        if (x < config.width / 2) {
+                            teamId = 'red';
+                        } else {
+                            teamId = 'green';
+                        }
+                        turretCount = rng.nextInt(2, 6);
+                    } else {
+                        color = 0x666666;
+                    }
+
+                    const seed = rng.nextInt(0, 1000000);
+
+                    planets.push({
+                        x, y, radius, color, teamId, turretCount, seed
+                    });
+                    placed = true;
+                }
             }
-
-            const seed = rng.nextInt(0, 1000000);
-
-            planets.push({
-                x, y, radius, color, teamId, turretCount, seed
-            });
+            
+            if (!placed) {
+                console.warn(`Could not find space for planet ${i} after ${MAX_ATTEMPTS} attempts`);
+            }
         }
 
         return { planets };

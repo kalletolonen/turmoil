@@ -13,7 +13,6 @@ export class CollisionManager {
   private rapierManager: RapierManager;
   
   constructor(
-      private scene: Phaser.Scene,
       private combatManager: CombatManager,
       private teamManager: TeamManager,
       private getPlanets: () => Planet[],
