@@ -6,24 +6,26 @@ import { TurnPhase } from '../logic/TurnManager';
 
 export class UIManager {
     private scene: MainScene;
+    private uiScene: Phaser.Scene;
     private weaponUIContainer: Phaser.GameObjects.Container | null = null;
 
-    constructor(scene: MainScene) {
+    constructor(scene: MainScene, uiScene: Phaser.Scene) {
         this.scene = scene;
+        this.uiScene = uiScene;
     }
 
     public createWeaponSelectionUI() {
         // Create a container for the bottom UI
-        const width = this.scene.scale.width;
+        const width = this.uiScene.scale.width;
         const height = 120;
-        const y = this.scene.scale.height - height;
+        const y = this.uiScene.scale.height - height;
         
-        this.weaponUIContainer = this.scene.add.container(0, y);
+        this.weaponUIContainer = this.uiScene.add.container(0, y);
         this.weaponUIContainer.setScrollFactor(0);
         this.weaponUIContainer.setDepth(2000);
         
         // Background (Sprite)
-        const bg = this.scene.add.image(width/2, height/2, 'white_1x1');
+        const bg = this.uiScene.add.image(width/2, height/2, 'white_1x1');
         bg.setDisplaySize(width, height);
         bg.setTint(0x222222);
         bg.setAlpha(0.9);
@@ -65,7 +67,7 @@ export class UIManager {
             const boxY = height / 2;
             
             // Button Background
-            const button = this.scene.add.image(boxX, boxY, 'white_1x1');
+            const button = this.uiScene.add.image(boxX, boxY, 'white_1x1');
             button.setDisplaySize(itemWidth, buttonHeight);
             button.setTint(0x444444);
             button.setInteractive({ useHandCursor: true });
@@ -82,7 +84,7 @@ export class UIManager {
             this.weaponUIContainer?.add(button);
             
             // Icon/Color
-            const icon = this.scene.add.image(boxX, boxY - 15, 'particle');
+            const icon = this.uiScene.add.image(boxX, boxY - 15, 'particle');
             icon.setTint(stats.color);
             const iconSize = Math.min(20, itemWidth * 0.2); // Scale icon
             icon.setDisplaySize(iconSize, iconSize);
@@ -91,8 +93,8 @@ export class UIManager {
             // Text
             // Scale font size based on width
             const fontSize = Math.max(10, Math.min(14, itemWidth / 10));
-            const nameText = this.scene.add.text(boxX, boxY + 5, stats.name, { fontSize: `${fontSize}px`, color: '#fff' }).setOrigin(0.5, 0);
-            const costText = this.scene.add.text(boxX, boxY + 20, `Cost: ${stats.cost}`, { fontSize: `${Math.max(10, fontSize - 2)}px`, color: '#aaa' }).setOrigin(0.5, 0);
+            const nameText = this.uiScene.add.text(boxX, boxY + 5, stats.name, { fontSize: `${fontSize}px`, color: '#fff' }).setOrigin(0.5, 0);
+            const costText = this.uiScene.add.text(boxX, boxY + 20, `Cost: ${stats.cost}`, { fontSize: `${Math.max(10, fontSize - 2)}px`, color: '#aaa' }).setOrigin(0.5, 0);
             
             // Allow text to wrap if too long for button? 
             // Better: truncate or just trust scaling. 
@@ -222,24 +224,60 @@ export class UIManager {
         this.updateWeaponSelectionUI();
     }
 
+    public createFireButton() {
+        const width = this.uiScene.scale.width;
+        const height = this.uiScene.scale.height;
+
+        // Bottom Right
+        const btnRadius = 40;
+        const x = width - btnRadius - 20;
+        const y = height - btnRadius - 140; // Above weapon selector (120 height)
+
+        const container = this.uiScene.add.container(x, y);
+        container.setScrollFactor(0);
+        container.setDepth(2000);
+
+        const circle = this.uiScene.add.circle(0, 0, btnRadius, 0xff0000);
+        circle.setStrokeStyle(2, 0xffffff);
+        circle.setInteractive({ useHandCursor: true });
+        
+        const text = this.uiScene.add.text(0, 0, 'FIRE!', { 
+            fontSize: '18px', 
+            color: '#ffffff',
+            fontStyle: 'bold'
+        }).setOrigin(0.5);
+
+        container.add([circle, text]);
+
+        circle.on('pointerdown', () => {
+            if (this.scene.turnManager.currentPhase === TurnPhase.PLANNING) {
+                this.scene.executeTurn();
+            }
+        });
+        
+        // Add hover effect
+        circle.on('pointerover', () => circle.setFillStyle(0xff4444));
+        circle.on('pointerout', () => circle.setFillStyle(0xff0000));
+    }
+
     public createDebugUI() {
         if (!this.scene.isDevMode) return;
 
         const x = 10;
         const y = 80;
         
-        const container = this.scene.add.container(x, y);
+        const container = this.uiScene.add.container(x, y);
         container.setScrollFactor(0);
         container.setDepth(2000); // Above other UI?
 
-        const bg = this.scene.add.image(0, 0, 'white_1x1');
+        const bg = this.uiScene.add.image(0, 0, 'white_1x1');
         bg.setDisplaySize(150, 40);
         bg.setTint(0x000000);
         bg.setAlpha(0.5);
         bg.setOrigin(0);
         container.add(bg);
 
-        const text = this.scene.add.text(10, 10, 'Toggle AI Traj (OFF)', { fontSize: '12px', color: '#ffffff' });
+        const text = this.uiScene.add.text(10, 10, 'Toggle AI Traj (OFF)', { fontSize: '12px', color: '#ffffff' });
         container.add(text);
 
         bg.setInteractive({ useHandCursor: true });
@@ -250,14 +288,14 @@ export class UIManager {
         });
 
         // Max AP Toggle
-        const maxApBg = this.scene.add.image(0, 50, 'white_1x1');
+        const maxApBg = this.uiScene.add.image(0, 50, 'white_1x1');
         maxApBg.setDisplaySize(150, 40);
         maxApBg.setTint(0x000000);
         maxApBg.setAlpha(0.5);
         maxApBg.setOrigin(0);
         container.add(maxApBg);
         
-        const maxApText = this.scene.add.text(10, 60, 'Max AP (Selected)', { fontSize: '12px', color: '#ffffff' });
+        const maxApText = this.uiScene.add.text(10, 60, 'Max AP (Selected)', { fontSize: '12px', color: '#ffffff' });
         container.add(maxApText);
         
         maxApBg.setInteractive({ useHandCursor: true });

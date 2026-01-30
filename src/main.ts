@@ -9,6 +9,7 @@ console.warn = (...args) => {
 };
 
 import { MainScene } from './scenes/MainScene';
+import { UIScene } from './scenes/UIScene';
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -18,7 +19,7 @@ const config: Phaser.Types.Core.GameConfig = {
   physics: {
     default: 'none', // We are using Rapier manually
   },
-  scene: [MainScene],
+  scene: [MainScene, UIScene],
   scale: {
     mode: Phaser.Scale.RESIZE,
     autoCenter: Phaser.Scale.CENTER_BOTH

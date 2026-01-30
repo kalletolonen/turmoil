@@ -25,16 +25,7 @@ export class InputManager {
         // Confirm Turn
         this.scene.input.keyboard?.on('keydown-SPACE', () => {
              if (this.scene.turnManager.currentPhase === TurnPhase.PLANNING) {
-                 this.scene.planets.forEach(p => {
-                     p.turretsList.forEach(t => {
-                         if (t.armed) {
-                             t.consumeActionPoints(1);
-                         }
-                     });
-                 });
-     
-                 this.scene.turnManager.commitTurn();
-                 this.scene.fireProjectiles();
+                 this.scene.executeTurn();
              }
          });
 

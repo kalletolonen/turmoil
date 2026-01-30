@@ -85,9 +85,7 @@ export class MainScene extends Phaser.Scene {
     
     // ...
 
-    this.uiManager = new UIManager(this);
-    this.uiManager.createWeaponSelectionUI();
-    this.uiManager.createDebugUI();
+
     
     // 3. Init AI Physics (after Rapier is ready)
     this.aiManager.init();
@@ -203,9 +201,11 @@ export class MainScene extends Phaser.Scene {
            // this.updateTeamUI();
      }
 
-     this.uiManager = new UIManager(this);
+     const uiScene = this.scene.get('UIScene');
+     this.uiManager = new UIManager(this, uiScene);
      this.uiManager.createWeaponSelectionUI();
      this.uiManager.createDebugUI();
+     this.uiManager.createFireButton();
      
      this.inputManager = new InputManager(this);
      this.inputManager.handleInput();
@@ -329,6 +329,21 @@ export class MainScene extends Phaser.Scene {
              }
          });
      });
+  }
+
+  public executeTurn() {
+       if (this.turnManager.currentPhase !== TurnPhase.PLANNING) return;
+
+       this.planets.forEach(p => {
+           p.turretsList.forEach(t => {
+               if (t.armed) {
+                   t.consumeActionPoints(1);
+               }
+           });
+       });
+
+       this.turnManager.commitTurn();
+       this.fireProjectiles();
   }
 
   private applyAPAccumulation() {
