@@ -47,6 +47,9 @@ export class Projectile extends Phaser.GameObjects.Sprite {
         const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
             .setTranslation(x, y)
             .setLinvel(Math.cos(angle) * velocity, Math.sin(angle) * velocity)
+            .setLinearDamping(0.0)
+            .setAngularDamping(0.0)
+            .setCanSleep(false)
             .setCcdEnabled(true); // Continuous collision detection for fast objects
 
 
@@ -207,10 +210,28 @@ export class Projectile extends Phaser.GameObjects.Sprite {
         if (translation.x < -2000 || translation.x > 4000 || translation.y < -2000 || translation.y > 4000) {
            this.destroy();
            if (this.scene) (this.scene as any).removeProjectile(this);
+           return;
         }
+
+        // DEBUG: Show Velocity
+        /*
+        if (!this.getData('debugText')) {
+             const text = this.scene.add.text(this.x, this.y, '', { fontSize: '10px', color: '#fff' });
+             this.setData('debugText', text);
+        }
+        const text = this.getData('debugText') as Phaser.GameObjects.Text;
+        if (text) {
+             const vel = this.bodyId.linvel();
+             text.setPosition(this.x + 10, this.y - 10);
+             text.setText(`v: ${vel.x.toFixed(1)}, ${vel.y.toFixed(1)}`);
+        }
+        */
     }
     
     destroy(fromScene?: boolean) {
+        // const text = this.getData('debugText');
+        // if (text) text.destroy();
+
         if (this.world && this.bodyId.isValid()) {
             this.world.removeRigidBody(this.bodyId);
         }

@@ -44,10 +44,14 @@ export class InputManager {
              const newZoom = Phaser.Math.Clamp(zoom - deltaY * 0.001, 0.1, 2.0);
              this.scene.cameras.main.setZoom(newZoom);
          });
+
+         // Pinch State
+         let initialPinchDistance = 0;
+         let initialZoom = 1;
          
          // Prevent context menu
          this.scene.game.canvas.oncontextmenu = (e) => e.preventDefault();
-         
+
          // POINTER DOWN
          this.scene.input.on('pointerdown', (pointer: Phaser.Input.Pointer, currentlyOver: Phaser.GameObjects.GameObject[]) => {
              // 1. Check UI
@@ -118,9 +122,35 @@ export class InputManager {
                   this.startPan(pointer);
              }
          });
-     
-         // POINTER MOVE
+
+         // POINTER MOVE (Consolidated)
          this.scene.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+             // 1. PINCH ZOOM CHECK
+             if (this.scene.input.pointer1.isDown && this.scene.input.pointer2.isDown) {
+                  // Pinching
+                  const dist = Phaser.Math.Distance.Between(
+                      this.scene.input.pointer1.x, this.scene.input.pointer1.y,
+                      this.scene.input.pointer2.x, this.scene.input.pointer2.y
+                  );
+
+                  if (initialPinchDistance === 0) {
+                      initialPinchDistance = dist;
+                      initialZoom = this.scene.cameras.main.zoom;
+                  } else {
+                      const scale = dist / initialPinchDistance;
+                      const newZoom = Phaser.Math.Clamp(initialZoom * scale, 0.2, 3.0);
+                      this.scene.cameras.main.setZoom(newZoom);
+                  }
+                  
+                  // Disable panning while pinching
+                  this.isPanning = false; 
+                  return; // Skip other logic
+             } else {
+                  // Reset pinch state if not pinching
+                  initialPinchDistance = 0;
+             }
+
+             // 2. DRAG / PAN LOGIC
              if (this.draggingTurret) {
                  this.dragCurrentPos?.set(pointer.worldX, pointer.worldY);
              } else if (this.isPanning) {

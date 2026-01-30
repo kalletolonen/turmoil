@@ -30,9 +30,34 @@ export class UIManager {
         this.weaponUIContainer.add(bg);
         
         const types = [ProjectileType.BASIC, ProjectileType.GIGA_BLASTER, ProjectileType.COLONIZER, ProjectileType.RADAR, ProjectileType.DEFENDER];
-        const spacing = 150;
-        const startX = width / 2 - ((types.length - 1) * spacing) / 2;
         
+        // Dynamic Spacing Calculation
+        // We have 5 items. We want some padding on sides.
+        // Total Width = Scale Width
+        // Max button width = 140 (as before).
+        // Max spacing = 150.
+        
+        const count = types.length;
+        const availableWidth = width;
+        const maxButtonWidth = 140;
+        
+        // Calculate fit
+        let itemWidth = maxButtonWidth;
+        let spacing = itemWidth + 10;
+        
+        // If (count * spacing) > availableWidth, shrink
+        if (count * spacing > availableWidth) {
+             // Fit to screen
+             spacing = availableWidth / count;
+             itemWidth = spacing - 10; // 5px gap each side
+        }
+        
+        // Center the group
+        const totalGroupWidth = count * spacing;
+        const startX = (width - totalGroupWidth) / 2 + (spacing / 2);
+        
+        const buttonHeight = Math.min(100, itemWidth * 0.8); // Adjust height ratio slightly if really small
+
         types.forEach((type, i) => {
             const stats = PROJECTILE_DATA[type];
             
@@ -41,7 +66,7 @@ export class UIManager {
             
             // Button Background
             const button = this.scene.add.image(boxX, boxY, 'white_1x1');
-            button.setDisplaySize(140, 100);
+            button.setDisplaySize(itemWidth, buttonHeight);
             button.setTint(0x444444);
             button.setInteractive({ useHandCursor: true });
             button.setName(`btn_${type}`); // Identify for update
@@ -57,14 +82,22 @@ export class UIManager {
             this.weaponUIContainer?.add(button);
             
             // Icon/Color
-            const icon = this.scene.add.image(boxX, boxY - 20, 'particle');
+            const icon = this.scene.add.image(boxX, boxY - 15, 'particle');
             icon.setTint(stats.color);
-            icon.setDisplaySize(20, 20); // Radius 10 -> diam 20
+            const iconSize = Math.min(20, itemWidth * 0.2); // Scale icon
+            icon.setDisplaySize(iconSize, iconSize);
             this.weaponUIContainer?.add(icon);
             
             // Text
-            const nameText = this.scene.add.text(boxX, boxY, stats.name, { fontSize: '14px', color: '#fff' }).setOrigin(0.5, 0);
-            const costText = this.scene.add.text(boxX, boxY + 20, `Cost: ${stats.cost}`, { fontSize: '12px', color: '#aaa' }).setOrigin(0.5, 0);
+            // Scale font size based on width
+            const fontSize = Math.max(10, Math.min(14, itemWidth / 10));
+            const nameText = this.scene.add.text(boxX, boxY + 5, stats.name, { fontSize: `${fontSize}px`, color: '#fff' }).setOrigin(0.5, 0);
+            const costText = this.scene.add.text(boxX, boxY + 20, `Cost: ${stats.cost}`, { fontSize: `${Math.max(10, fontSize - 2)}px`, color: '#aaa' }).setOrigin(0.5, 0);
+            
+            // Allow text to wrap if too long for button? 
+            // Better: truncate or just trust scaling. 
+            // "Giga Blaster" is long.
+            nameText.setWordWrapWidth(itemWidth - 4);
             
             this.weaponUIContainer?.add(nameText);
             this.weaponUIContainer?.add(costText);

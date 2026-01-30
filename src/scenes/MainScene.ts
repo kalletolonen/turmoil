@@ -63,6 +63,12 @@ export class MainScene extends Phaser.Scene {
     // 1. Init Physics
     await this.rapierManager.init();
     
+    // Fix for Android Touch Action (Scroll blocking)
+    this.game.canvas.style.touchAction = 'none';
+    
+    // Enable Multi-touch (Add 2 extra pointers for total 3, just to be safe)
+    this.input.addPointer(2);
+    
     // 2. Setup Managers
     this.combatManager = new CombatManager();
     this.collisionManager = new CollisionManager(

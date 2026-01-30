@@ -9,8 +9,11 @@ export interface GravityTarget {
 }
 
 export class GravitySystem {
-    // Gravitational constant - tune this for gameplay feel
-    public static readonly G = 10; 
+    // Gravitational constant - Tune this for surface gravity feel
+    // With Mass = R^2, Surface Force = G * R^2 / R^2 = G.
+    // So G is directly the acceleration at surface (in pixels/step^2 approx).
+    public static readonly G = 0.5; 
+    public static readonly INFLUENCE_MULTIPLIER = 5.0;
 
     /**
      * Applies gravitational forces from planets to targets (Projectiles, Turrets).
@@ -31,20 +34,24 @@ export class GravitySystem {
                 const dx = planetPos.x - targetPos.x;
                 const dy = planetPos.y - targetPos.y;
                 const distSq = dx * dx + dy * dy;
+                
+                // Optimization: Influence Check
+                const influenceDist = planet.radiusValue * GravitySystem.INFLUENCE_MULTIPLIER;
+                if (distSq > influenceDist * influenceDist) continue;
+
                 const dist = Math.sqrt(distSq);
 
-                // Identify mass (use radius for now as proxy for mass)
-                const planetMass = planet.radiusValue * 10; // Simple scaler
+                // Identify mass (Use Area: R^2)
+                const planetMass = planet.radiusValue * planet.radiusValue;
 
                 // F = G * (m1 * m2) / r^2
-                // We assume target mass is 1 for simplicity of force application
-                // Clamp distance to avoid singularity/extreme forces at center
+                // Clamp distance to avoid singularity
                 const clampedDist = Math.max(dist, planet.radiusValue * 0.3); 
                 const clampedDistSq = clampedDist * clampedDist;
 
                 let forceMagnitude = (GravitySystem.G * planetMass) / clampedDistSq;
                 
-                // Scale by target mass so heavy objects fall at same speed (F = ma => a = F/m => we want constant a, so F must scale by m)
+                // Scale by target mass
                 forceMagnitude *= targetMass;
 
                 // Normalize direction and apply force
