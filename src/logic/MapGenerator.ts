@@ -16,6 +16,7 @@ export interface PlanetData {
     color: number;
     teamId: string | null;
     turretCount: number;
+    seed: number;
 }
 
 export interface MapData {
@@ -85,8 +86,10 @@ export class MapGenerator {
                 color = 0x666666;
             }
 
+            const seed = rng.nextInt(0, 1000000);
+
             planets.push({
-                x, y, radius, color, teamId, turretCount
+                x, y, radius, color, teamId, turretCount, seed
             });
         }
 

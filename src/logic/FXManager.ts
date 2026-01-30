@@ -158,10 +158,11 @@ export class FXManager {
          }
     }
     
-    public showFloatingText(x: number, y: number, text: string, color: string) {
+    public createFloatingText(x: number, y: number, text: string, color: number) {
+        const colorStr = '#' + color.toString(16).padStart(6, '0');
         const floatingText = this.scene.add.text(x, y, text, {
             fontSize: '16px',
-            color: color,
+            color: colorStr,
             fontFamily: 'Arial',
             fontStyle: 'bold',
             stroke: '#000000',

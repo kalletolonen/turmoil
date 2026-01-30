@@ -113,7 +113,7 @@ export class MainScene extends Phaser.Scene {
         }, this.rng);
 
         mapData.planets.forEach((pData) => {
-             const planet = new Planet(this, pData.x, pData.y, pData.radius, pData.color, pData.teamId);
+             const planet = new Planet(this, pData.x, pData.y, pData.radius, pData.color, pData.teamId, pData.seed);
              
              if (pData.teamId === redTeam.id) redTeam.addPlanet(planet);
              if (pData.teamId === greenTeam.id) greenTeam.addPlanet(planet);
@@ -175,8 +175,6 @@ export class MainScene extends Phaser.Scene {
     this.add.text(10, 10, 'Press SPACE to Execute Turn', { fontSize: '16px', color: '#ffffff' }).setScrollFactor(0);
     this.data.set('phaseText', this.add.text(10, 30, 'Phase: PLANNING', { fontSize: '16px', color: '#00ff00' }).setScrollFactor(0));
 
-     this.initialized = true;
-
      // Trigger initial state if we missed the event
      if (this.turnManager.currentPhase === TurnPhase.PLANNING) {
           // Re-run the planning setup manually
@@ -209,6 +207,7 @@ export class MainScene extends Phaser.Scene {
      });
 
      this.trajectorySystem = new TrajectorySystem(this);
+     this.initialized = true;
   }
 
   update(_time: number, delta: number) {
@@ -334,7 +333,7 @@ export class MainScene extends Phaser.Scene {
               const text = `+${apGain}`;
               // Green for player/friendly, maybe different for enemy?
               // For now simpler: Cyan for AP.
-              FXManager.getInstance().showFloatingText(t.position.x, t.position.y - 20, text, '#00ffff');
+              FXManager.getInstance().createFloatingText(t.position.x, t.position.y - 20, text, 0x00ffff);
 
               // If Red Faction Max AP config is enabled, max it out
               if (GameConfig.RED_FACTION_MAX_AP && t.teamId === 'red') {

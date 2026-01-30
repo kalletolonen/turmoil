@@ -66,6 +66,22 @@ export class CollisionManager {
             pendingDestruction.push(() => this.handleProjectileHitProjectile(body1, body2));
         }
 
+        // 4. Turret vs Turret (Fusion)
+        else if (data1?.type === 'turret' && data2?.type === 'turret') {
+             const tBody1 = body1;
+             const tBody2 = body2;
+             const tur1 = (tBody1 as any).userData.parent as Turret;
+             const tur2 = (tBody2 as any).userData.parent as Turret;
+
+             // Only fuse if one is falling and the other is stationary (or both falling?)
+             // Let's say if A falls onto B, B absorbs A.
+             if (tur1.isFalling && !tur2.isFalling) {
+                 pendingDestruction.push(() => this.handleTurretFusion(tur2, tur1));
+             } else if (!tur1.isFalling && tur2.isFalling) {
+                  pendingDestruction.push(() => this.handleTurretFusion(tur1, tur2));
+             }
+        }
+
         // 4. Turret vs Planet (Landing)
         else if ((data1?.type === 'turret' && data2?.type === 'planet') || 
                  (data2?.type === 'turret' && data1?.type === 'planet')) {
@@ -105,8 +121,32 @@ export class CollisionManager {
       const projectileVisual = projParams.visual as Projectile;
       
       if (projectileVisual) {
+          // Guard: Prevent double-processing if already handled
+          if (projectileVisual.processed) return;
+          projectileVisual.processed = true;
+
           const team = this.teamManager.getTeam(projectileVisual.teamId || '');
           const color = team ? team.color : 0xffffff;
+          
+          if (projectileVisual.projectileType === ProjectileType.COLONIZER) {
+               // Fusion / Landing logic
+               const targetTurret = turretBody.userData?.parent as Turret;
+               if (targetTurret) {
+                   // Find the planet this turret is on
+                   const planets = this.getPlanets();
+                   const planet = planets.find(p => p.turretsList.includes(targetTurret));
+                   
+                   if (planet) {
+                        const angle = Math.atan2(projectileVisual.y - planet.position.y, projectileVisual.x - planet.position.x);
+                        planet.addTurretAtAngle(angle, projectileVisual.teamId);
+                   }
+               }
+               
+               projectileVisual.destroy();
+               this.removeProjectile(projectileVisual);
+               return;
+          }
+
           const stats = PROJECTILE_DATA[projectileVisual.projectileType];
           const radius = stats ? stats.explosionRadius : 15;
           const damage = projectileVisual.damage; 
@@ -153,7 +193,11 @@ export class CollisionManager {
       const projectileVisual = projParams.visual as Projectile;
       const planets = this.getPlanets();
       
-      if (projectileVisual) {
+      // Guard: Prevent double-processing if already handled
+      if (!projectileVisual || projectileVisual.processed) {
+          return;
+      }
+      projectileVisual.processed = true;
           const team = this.teamManager.getTeam(projectileVisual.teamId || '');
           const color = team ? team.color : 0xffffff;
           
@@ -181,9 +225,8 @@ export class CollisionManager {
               hitPlanet.addTurretAtAngle(angle, projectileVisual.teamId);
           }
 
-          projectileVisual.destroy();
-          this.removeProjectile(projectileVisual);
-      }
+      projectileVisual.destroy();
+      this.removeProjectile(projectileVisual);
   }
 
   private handleProjectileHitProjectile(body1: any, body2: any) {
@@ -217,5 +260,31 @@ export class CollisionManager {
           p2.destroy();
           this.removeProjectile(p2);
       }
+  }
+
+  private handleTurretFusion(host: Turret, donor: Turret) {
+      if (!host.visual || !donor.visual) return; // Already destroyed?
+      if (host.teamId !== donor.teamId) return; // Only fuse same faction
+
+      
+      // Transfer stats
+      // Increase MAX health and AP first
+      host.maxHealth += donor.maxHealth;
+      host.maxActionPoints += donor.maxActionPoints;
+      
+      host.health += donor.health;
+      host.actionPoints += donor.actionPoints;
+      
+      // Visual feedback
+      host.visual.setTint(0x00ffff); // Cyan to indicate fusion/upgrade
+      // Maybe scale up slightly?
+      host.visual.setScale(host.visual.scaleX * 1.2, host.visual.scaleY * 1.2);
+      
+      FXManager.getInstance().createFloatingText(host.position.x, host.position.y, "FUSION!", 0x00ffff);
+      
+      host.updateHealthBar();
+      
+      // Destroy donor
+      donor.destroy();
   }
 }

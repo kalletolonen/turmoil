@@ -198,10 +198,12 @@ export class Turret {
         this.healthBar.clear();
         if (this.health <= 0) return;
         
-        const width = 20;
+        // Scale width based on Max Health (base 20px for 100hp)
+        const baseWidth = 20;
+        const width = baseWidth * (this.maxHealth / 100);
         const height = 4;
         const x = this.position.x - width / 2;
-        const y = this.position.y - 15;
+        const y = this.position.y - 15 - (this.visual.scaleY - 1) * 10;
         
         // Background
         this.healthBar.fillStyle(0x000000);
@@ -285,16 +287,21 @@ export class Turret {
 
     private drawAPPips() {
         // Draw AP pips above health bar
-        const width = 20;
-        const pipsY = this.position.y - 20; 
-        const startX = this.position.x - width / 2;
+        const baseWidth = 20;
+        const barWidth = baseWidth * (this.maxHealth / 100);
+        const pipsY = this.position.y - 20 - (this.visual.scaleY - 1) * 10; 
+        const startX = this.position.x - barWidth / 2;
         
         const pipSize = 3;
         const spacing = 4;
+        const maxPerRow = Math.floor(barWidth / spacing);
 
         for (let i = 0; i < this.maxActionPoints; i++) {
-            const px = startX + i * spacing;
-            const py = pipsY;
+            const row = Math.floor(i / maxPerRow);
+            const col = i % maxPerRow;
+            
+            const px = startX + col * spacing;
+            const py = pipsY - (row * (pipSize + 2));
             
             // Empty pip border
             this.healthBar.lineStyle(1, 0x888888);

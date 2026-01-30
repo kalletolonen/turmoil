@@ -9,6 +9,7 @@ export class Projectile extends Phaser.GameObjects.Sprite {
     private rapierManager: RapierManager;
     private world: RAPIER.World;
     public damage: number;
+    public processed: boolean = false; // Guard against duplicate collision handling
 
     constructor(
         scene: Phaser.Scene, 
@@ -155,23 +156,25 @@ export class Projectile extends Phaser.GameObjects.Sprite {
                 const isCollisionCourse = distToTrajectory < (nearest.radiusValue + 10) && dot > 0; // dot > 0 means planet is in front, not behind
 
                 // 2. Levitation / Soft Landing (< 15px)
+                // 2. Levitation / Soft Landing (< 15px)
                 if (isCollisionCourse && minDist < 15) {
-                    // Anti-gravity levitation to prevent smashing
-                    // Gravity is approx 10-20? We want to counteract it plus slow down.
-                    const hoverForce = 0.8 * this.bodyId.mass();
-                    
-                    // Apply force AWAY from planet center
-                    const angleFromPlanet = Math.atan2(translation.y - nearest.position.y, translation.x - nearest.position.x);
-                    const hx = Math.cos(angleFromPlanet) * hoverForce;
-                    const hy = Math.sin(angleFromPlanet) * hoverForce;
-                    
-                    this.bodyId.applyImpulse({ x: hx, y: hy }, true);
-                    
-                    // Also damp velocity if too fast
-                    if (speed > 5) {
-                         const dampX = -vel.x * 0.1 * this.bodyId.mass();
-                         const dampY = -vel.y * 0.1 * this.bodyId.mass();
-                         this.bodyId.applyImpulse({ x: dampX, y: dampY }, true);
+                    // Only hover/damp if moving fast enough to need cushioning
+                    if (speed > 4) {
+                        // Anti-gravity levitation to prevent smashing
+                        // Gravity is approx 10-20? We want to counteract it plus slow down.
+                        const hoverForce = 0.8 * this.bodyId.mass();
+                        
+                        // Apply force AWAY from planet center
+                        const angleFromPlanet = Math.atan2(translation.y - nearest.position.y, translation.x - nearest.position.x);
+                        const hx = Math.cos(angleFromPlanet) * hoverForce;
+                        const hy = Math.sin(angleFromPlanet) * hoverForce;
+                        
+                        this.bodyId.applyImpulse({ x: hx, y: hy }, true);
+                        
+                        // Also damp velocity if too fast
+                        const dampX = -vel.x * 0.1 * this.bodyId.mass();
+                        const dampY = -vel.y * 0.1 * this.bodyId.mass();
+                        this.bodyId.applyImpulse({ x: dampX, y: dampY }, true);
                     }
                 }
                 // 3. Suicide Burn (< 60px)
