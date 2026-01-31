@@ -1,51 +1,106 @@
 import Phaser from 'phaser';
 import { MainScene } from '../scenes/MainScene';
-import { Projectile } from '../objects/Projectile';
-import { Turret } from '../objects/Turret';
 import { GravitySystem } from './GravitySystem';
 import { ProjectileType } from '../objects/ProjectileTypes';
-import RAPIER from '@dimforge/rapier2d-compat';
 import { GameConfig } from '../config';
+
+
+interface TrajectoryPoint {
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+}
 
 export class TrajectorySystem {
     private scene: MainScene;
     
     // Constants from MainScene
-    private readonly DRAG_SPEED_SCALE = 2.0;
-
+    // private readonly DRAG_SPEED_SCALE = 0.032; // Moved to GameConfig
+    private readonly PROJECTILE_RADIUS = 5;
 
     constructor(scene: MainScene) {
         this.scene = scene;
     }
 
     public predictTrajectory(graphics: Phaser.GameObjects.Graphics) {
-        const predictionWorld = this.scene.rapierManager.createPredictionWorld();
-        if (!predictionWorld) return;
-
-        // Ensure collision events are enabled for all colliders (snapshot might lose them or we want to be sure)
-        predictionWorld.forEachCollider(c => {
-            c.setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
-        });
-
-        const ghostProjectiles: Projectile[] = [];
+        const trajectories: Array<{ points: TrajectoryPoint[], color: number }> = [];
         
-        // Helper to add ghost
-        const addGhost = (t: Turret, startPos: {x: number, y: number}, direction: {x: number, y: number}) => {
-            const angle = Math.atan2(direction.y, direction.x);
-            const speed = Math.sqrt(direction.x * direction.x + direction.y * direction.y);
+        // Helper to simulate trajectory
+        const simulateTrajectory = (
+            startX: number, 
+            startY: number, 
+            vx: number, 
+            vy: number
+        ): TrajectoryPoint[] => {
+            const points: TrajectoryPoint[] = [];
+            let x = startX;
+            let y = startY;
+            let velX = vx;
+            let velY = vy;
             
-            const tipLen = 15;
-            const tipX = startPos.x + Math.cos(angle) * tipLen;
-            const tipY = startPos.y + Math.sin(angle) * tipLen;
+            const maxSteps = 180; // 3 seconds at 60fps
             
-            // Pass teamId
-            const ghost = new Projectile(this.scene, tipX, tipY, angle, speed, predictionWorld, t.projectileType, t.teamId);
-            ghost.setVisible(false);
-            // Store color for drawing
-            const team = this.scene.teamManager.getTeam(t.teamId || '');
-            (ghost as any).trajectoryColor = team ? team.color : 0xffff00;
+            for (let step = 0; step < maxSteps; step++) {
+                // Store point at current position
+                points.push({ x, y, vx: velX, vy: velY });
+                
+                // Calculate gravity forces (matching GravitySystem.ts)
+                let forceX = 0;
+                let forceY = 0;
+                const projectileMass = 1.0; // Matches Projectile.ts density calculation
+                
+                for (const planet of this.scene.planets) {
+                    const dx = planet.position.x - x;
+                    const dy = planet.position.y - y;
+                    const distSq = dx * dx + dy * dy;
+                    
+                    // Optimization: Influence check (matching GravitySystem)
+                    const influenceDist = planet.radiusValue * GravitySystem.INFLUENCE_MULTIPLIER;
+                    if (distSq > influenceDist * influenceDist) continue;
+                    
+                    const dist = Math.sqrt(distSq);
+                    
+                    // Check collision with planet
+                    if (dist < planet.radiusValue + this.PROJECTILE_RADIUS) {
+                        // Hit planet, stop simulation
+                        return points;
+                    }
+                    
+                    // Calculate gravity force (matching GravitySystem.ts exactly)
+                    const planetMass = planet.radiusValue * planet.radiusValue;
+                    const clampedDist = Math.max(dist, planet.radiusValue * 0.3);
+                    const clampedDistSq = clampedDist * clampedDist;
+                    
+                    let forceMagnitude = (GravitySystem.G * planetMass) / clampedDistSq;
+                    forceMagnitude *= projectileMass;
+                    
+                    // Normalize and accumulate force
+                    forceX += (dx / dist) * forceMagnitude;
+                    forceY += (dy / dist) * forceMagnitude;
+                }
+                
+                // Semi-implicit Euler integration (matching Rapier):
+                // 1. Update velocity first: v_new = v_old + a * dt
+                // 2. Update position with new velocity: x_new = x_old + v_new * dt
+                // Since we're working in per-frame units, dt = 1
+                const accelX = forceX / projectileMass;
+                const accelY = forceY / projectileMass;
+                
+                velX += accelX;
+                velY += accelY;
+                
+                // Update position with new velocity (semi-implicit)
+                x += velX;
+                y += velY;
+                
+                // Out of bounds check
+                if (x < -2000 || x > 4000 || y < -2000 || y > 4000) {
+                    break;
+                }
+            }
             
-            ghostProjectiles.push(ghost);
+            return points;
         };
         
         // 1. Add already armed turrets
@@ -58,15 +113,10 @@ export class TrajectorySystem {
                 if (team && team.isAI) {
                     // Check if player has Radar
                     let hasRadar = false;
-                    // Scan all planets for player turrets with Radar
-                    // Assuming player is always valid team (not AI)? Or checking specifically for 'player' team?
-                    // We can check if ANY non-AI turret has Radar?
-                    // Or specifically the local player? For now, we assume non-AI teams are the player.
                     
                     for (const planet of this.scene.planets) {
                         for (const turret of planet.turretsList) {
                             const turretTeam = this.scene.teamManager.getTeam(turret.teamId || '');
-                            // If it's a player turret (not AI) and has Radar
                             if (turretTeam && !turretTeam.isAI && turret.projectileType === ProjectileType.RADAR) {
                                 hasRadar = true;
                                 break;
@@ -81,7 +131,14 @@ export class TrajectorySystem {
                 }
 
                 if (t.armed && t.aimVector) {
-                    addGhost(t, t.position, t.aimVector);
+                    const angle = Math.atan2(t.aimVector.y, t.aimVector.x);
+                    const tipLen = GameConfig.PROJECTILE_SPAWN_OFFSET;
+                    const startX = t.position.x + Math.cos(angle) * tipLen;
+                    const startY = t.position.y + Math.sin(angle) * tipLen;
+                    
+                    const teamColor = team ? team.color : 0xffff00;
+                    const points = simulateTrajectory(startX, startY, t.aimVector.x, t.aimVector.y);
+                    trajectories.push({ points, color: teamColor });
                 }
             });
         });
@@ -91,12 +148,12 @@ export class TrajectorySystem {
             const t = this.scene.inputManager.draggingTurret;
             const start = t.position;
             const current = { x: this.scene.inputManager.dragCurrentPos.x, y: this.scene.inputManager.dragCurrentPos.y };
-            // Drag logic duplicates logic in pointerup: Pull back to shoot forward
+            
             const dx = start.x - current.x;
             const dy = start.y - current.y;
             
-            let vx = dx * this.DRAG_SPEED_SCALE;
-            let vy = dy * this.DRAG_SPEED_SCALE;
+            let vx = dx * GameConfig.DRAG_SPEED_SCALE;
+            let vy = dy * GameConfig.DRAG_SPEED_SCALE;
             
             const speed = Math.sqrt(vx*vx + vy*vy);
             if (speed > GameConfig.MAX_PROJECTILE_SPEED) {
@@ -105,132 +162,39 @@ export class TrajectorySystem {
                 vy *= scale;
             }
             
-            // Only predict if meaningful drag
             if (speed > 1) {
-                addGhost(t, start, { x: vx, y: vy });
+                const angle = Math.atan2(vy, vx);
+                const tipLen = GameConfig.PROJECTILE_SPAWN_OFFSET;
+                const startX = start.x + Math.cos(angle) * tipLen;
+                const startY = start.y + Math.sin(angle) * tipLen;
+                
+                const team = this.scene.teamManager.getTeam(t.teamId || '');
+                const teamColor = team ? team.color : 0xffff00;
+                const points = simulateTrajectory(startX, startY, vx, vy);
+                trajectories.push({ points, color: teamColor });
             }
         }
 
-        if (ghostProjectiles.length === 0) {
-            predictionWorld.free();
-            return;
-        }
+        // Draw all trajectories with dotted style (Angry Birds)
+        trajectories.forEach(({ points, color }) => {
+            const dotRadius = 3; // Slightly larger for visibility
+            
+            // Spatial spacing logic: only draw if we've moved enough distance
+            let lastDrawX = -9999;
+            let lastDrawY = -9999;
+            const minSpacing = 15; // 15 pixels between dots
 
-        // Simulate N steps
-        const steps = 180; // 3 seconds
-
-        const eventQueue = new RAPIER.EventQueue(true);
-        // Map body handle to ghost projectile
-        const ghostMap = new Map<number, Projectile>();
-        ghostProjectiles.forEach(g => {
-            // Access private bodyId (or expose it via getter). Using any for now as quick fix.
-            const body = (g as any).bodyId; 
-            if (body) {
-                ghostMap.set(body.handle, g);
+            for (let i = 0; i < points.length; i++) {
+                const p = points[i];
+                const distSinceLast = Phaser.Math.Distance.Between(p.x, p.y, lastDrawX, lastDrawY);
+                
+                if (distSinceLast >= minSpacing) {
+                    graphics.fillStyle(color, 1.0); // Fully opaque
+                    graphics.fillCircle(p.x, p.y, dotRadius);
+                    lastDrawX = p.x;
+                    lastDrawY = p.y;
+                }
             }
         });
-
-        for (let i = 0; i < steps; i++) {
-            if (ghostMap.size === 0) break;
-
-            // Store previous positions for raycasting
-            const prevPositions = new Map<number, {x: number, y: number}>();
-            ghostMap.forEach((g, handle) => {
-                prevPositions.set(handle, { x: g.x, y: g.y });
-            });
-
-            const activeArray = Array.from(ghostMap.values());
-            GravitySystem.applyGravity(activeArray, this.scene.planets);
-            
-            predictionWorld.step(eventQueue);
-            
-            // 1. Check Physics Events (keep good logic)
-            eventQueue.drainCollisionEvents((handle1, handle2, started) => {
-                if (!started) return;
-                
-                // Get colliders
-                const c1 = predictionWorld.getCollider(handle1);
-                const c2 = predictionWorld.getCollider(handle2);
-                if (!c1 || !c2) return;
-                
-                // Get parents (bodies)
-                const b1 = c1.parent();
-                const b2 = c2.parent();
-                if (!b1 || !b2) return;
-                
-                const h1 = b1.handle;
-                const h2 = b2.handle;
-                
-                // Check if either body is a ghost
-                if (ghostMap.has(h1)) {
-                    const g = ghostMap.get(h1)!;
-                    g.destroy();
-                    ghostMap.delete(h1);
-                }
-                
-                if (ghostMap.has(h2)) {
-                    const g = ghostMap.get(h2)!;
-                    g.destroy();
-                    ghostMap.delete(h2);
-                }
-            });
-
-            // 2. Manual Raycast Check (Fallback for tunneling/thin walls)
-            ghostMap.forEach((g, handle) => {
-                const prev = prevPositions.get(handle);
-                if (!prev) return;
-                
-                // Ray from prev to current
-                const dx = g.x - prev.x;
-                const dy = g.y - prev.y;
-                const dist = Math.sqrt(dx*dx + dy*dy);
-                
-                if (dist > 0.001) {
-                     const dir = { x: dx/dist, y: dy/dist };
-                     const ray = new RAPIER.Ray({ x: prev.x, y: prev.y }, dir);
-                     
-                     // We need to ignore the projectile's own collider
-                     // But accessing collider from ghost is tricky if private.
-                     // However, Raycast can just check `toi`. If `toi < dist` and hit is NOT self.
-                     // Actually, usually we can pass a filter.
-                     
-                     // Simple approach: Interaction groups or predicate.
-                     // `castRay` signature: (ray, maxToi, solid, groups, filter, filterData, target)
-                     // or CastRay(ray, maxToi, true)
-                     
-                     const hit = predictionWorld.castRay(ray, dist, true);
-                     if (hit) {
-                         // Check what we hit.
-                         // If we hit ourself, ignore.
-                         const collider = hit.collider;
-                         const parent = collider.parent();
-                         
-                         if (parent && parent.handle !== handle) {
-                             // Hit something else (Planet!)
-                             // console.log("Raycast Hit!", parent.handle);
-                             g.destroy();
-                             ghostMap.delete(handle);
-                         }
-                     }
-                }
-            });
-
-            // Update Graphics
-            ghostMap.forEach((ghost) => {
-                const startPos = { x: ghost.x, y: ghost.y };
-                ghost.update(); // Update sprite from body
-                const endPos = { x: ghost.x, y: ghost.y };
-                
-                const color = (ghost as any).trajectoryColor || 0xffff00;
-                graphics.lineStyle(2, color, 0.5);
-                graphics.lineBetween(startPos.x, startPos.y, endPos.x, endPos.y);
-            });
-        }
-        
-        ghostProjectiles.forEach(g => {
-            if (g.active) g.destroy(); // Cleanup remaining
-        });
-        
-        predictionWorld.free();
     }
 }

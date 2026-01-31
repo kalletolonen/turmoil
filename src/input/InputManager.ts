@@ -12,7 +12,7 @@ export class InputManager {
     public dragStartPos: Phaser.Math.Vector2 | null = null;
     public dragCurrentPos: Phaser.Math.Vector2 | null = null;
     
-    private readonly DRAG_SPEED_SCALE = 2.0;
+    // private readonly DRAG_SPEED_SCALE = 0.032; // Moved to GameConfig
 
     private isPanning: boolean = false;
     private panStart: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
@@ -221,8 +221,8 @@ export class InputManager {
     private calculateAndArm(dx: number, dy: number) {
         if (!this.draggingTurret) return;
 
-        const vx = dx * this.DRAG_SPEED_SCALE;
-        const vy = dy * this.DRAG_SPEED_SCALE;
+        const vx = dx * GameConfig.DRAG_SPEED_SCALE;
+        const vy = dy * GameConfig.DRAG_SPEED_SCALE;
         
         let finalVx = vx;
         let finalVy = vy;

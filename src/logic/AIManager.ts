@@ -4,6 +4,7 @@ import { Turret } from '../objects/Turret';
 
 import { PhysicsSimulator } from '../physics/PhysicsSimulator';
 import { PROJECTILE_DATA } from '../objects/ProjectileTypes';
+import { GameConfig } from '../config';
 import Phaser from 'phaser';
 
 export class AIManager {
@@ -152,10 +153,12 @@ export class AIManager {
                  testAngle = upAngle + (Math.random() * range - range/2);
                  
                  // For indirect shots, we vary speed wildly
-                 testSpeed = 20 + Math.random() * 70; // 20 to 90
+                 const minSpeed = GameConfig.MAX_PROJECTILE_SPEED * 0.2;
+                 const maxSpeed = GameConfig.MAX_PROJECTILE_SPEED;
+                 testSpeed = minSpeed + Math.random() * (maxSpeed - minSpeed);
             }
 
-            if (testSpeed > 90) testSpeed = 90;
+            if (testSpeed > GameConfig.MAX_PROJECTILE_SPEED) testSpeed = GameConfig.MAX_PROJECTILE_SPEED;
 
             const vx = Math.cos(testAngle) * testSpeed;
             const vy = Math.sin(testAngle) * testSpeed;

@@ -17,7 +17,7 @@ export class Planet {
 
     // Polybooljs uses regions: number[][][] (list of polygons, where each polygon is list of [x,y])
     private regions: number[][][] = [];
-
+    
     public teamId: string | null = null;
     public readonly id: string = Phaser.Utils.String.UUID();
 

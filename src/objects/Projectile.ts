@@ -1,15 +1,17 @@
 import Phaser from 'phaser';
-import { RapierManager } from '../physics/RapierManager';
-import RAPIER from '@dimforge/rapier2d-compat';
 import { ProjectileType, PROJECTILE_DATA } from './ProjectileTypes';
-import { INTERACTION_PROJECTILE } from '../physics/PhysicsGroups';
+import { GravitySystem } from '../logic/GravitySystem';
+import { FXManager } from '../logic/FXManager';
 
 export class Projectile extends Phaser.GameObjects.Sprite {
-    private bodyId: RAPIER.RigidBody;
-    private rapierManager: RapierManager;
-    private world: RAPIER.World;
     public damage: number;
-    public processed: boolean = false; // Guard against duplicate collision handling
+    public processed: boolean = false;
+    
+    // Math-based movement properties
+    private velX: number;
+    private velY: number;
+    private readonly PROJECTILE_RADIUS = 5;
+    private readonly PROJECTILE_MASS = 1.0;
 
     constructor(
         scene: Phaser.Scene, 
@@ -17,7 +19,7 @@ export class Projectile extends Phaser.GameObjects.Sprite {
         y: number, 
         angle: number, 
         velocity: number = 20, 
-        world?: RAPIER.World, 
+        _world?: any, // Keep signature for compatibility but unused
         public projectileType: ProjectileType = ProjectileType.BASIC,
         public teamId: string | null = null
     ) {
@@ -26,59 +28,225 @@ export class Projectile extends Phaser.GameObjects.Sprite {
         const stats = PROJECTILE_DATA[projectileType];
         this.damage = stats.damage;
         
-        // If no texture is loaded, we can just use a shape visibly or rely on the scene to have a texture.
-        // For safety, let's create a texture if it doesn't exist or just use a circle.
-        // Texture is expected to be created by MainScene
-        // if (!scene.textures.exists('projectile')) { ... }
-
         this.setTexture('projectile');
-        
         scene.add.existing(this);
-        this.rapierManager = RapierManager.getInstance();
-
-        // Allow passing a specific world (for prediction)
-        this.world = world || this.rapierManager.world!;
         
-        if (!this.world) {
-            throw new Error("Rapier World not initialized");
-        }
-
-        // Physics: Dynamic body
-        const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
-            .setTranslation(x, y)
-            .setLinvel(Math.cos(angle) * velocity, Math.sin(angle) * velocity)
-            .setLinearDamping(0.0)
-            .setAngularDamping(0.0)
-            .setCanSleep(false)
-            .setCcdEnabled(true); // Continuous collision detection for fast objects
-
-
-
-        this.bodyId = this.world.createRigidBody(bodyDesc);
-        (this.bodyId as any).userData = { type: 'projectile', visual: this };
-
-        const colliderDesc = RAPIER.ColliderDesc.ball(5.0);
-        // Enable collisions
-        colliderDesc.setRestitution(0.8);
-        colliderDesc.setFriction(0.5);
-        // Volume (Area) = PI * 5^2 = ~78.54
-        // We want Mass = 1.0 to match AI assumptions and Logic
-        // Density = Mass / Volume
-        colliderDesc.setDensity(1.0 / (Math.PI * 25));
-        colliderDesc.setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
+        // Store velocity directly (in pixels per frame)
+        this.velX = Math.cos(angle) * velocity;
+        this.velY = Math.sin(angle) * velocity;
         
-        colliderDesc.setCollisionGroups(INTERACTION_PROJECTILE);
-
-        this.world.createCollider(colliderDesc, this.bodyId);
+        // Set initial position
+        this.setPosition(x, y);
     }
 
     update(planets: import('./Planet').Planet[] = [], projectiles: Projectile[] = []) {
-        if (!this.bodyId.isValid()) return;
+        // Apply gravity forces (matching TrajectorySystem and GravitySystem)
+        let forceX = 0;
+        let forceY = 0;
         
-        const translation = this.bodyId.translation();
-        this.setPosition(translation.x, translation.y);
 
-        // Defender Logic
+        for (const planet of planets) {
+            const dx = planet.position.x - this.x;
+            const dy = planet.position.y - this.y;
+            const distSq = dx * dx + dy * dy;
+            
+            // Optimization: Influence check
+            const influenceDist = planet.radiusValue * GravitySystem.INFLUENCE_MULTIPLIER;
+            if (distSq > influenceDist * influenceDist) continue;
+            
+            const dist = Math.sqrt(distSq);
+            
+            // Check collision with Turrets
+            const TURRET_HIT_RADIUS_SQ = 15 * 15;
+            for (const turret of planet.turretsList) {
+                const tDx = turret.position.x - this.x;
+                const tDy = turret.position.y - this.y;
+                const tDistSq = tDx*tDx + tDy*tDy;
+                
+                if (tDistSq < TURRET_HIT_RADIUS_SQ) {
+                     this.handleTurretHit(planets);
+                     return;
+                }
+            }
+
+            // Check collision with planet surface
+            // 1. Broad phase: Point check
+            if (dist < planet.radiusValue + this.PROJECTILE_RADIUS) {
+                 const distToSurface = planet.getDistanceToSurface(this.x, this.y);
+                 if (distToSurface <= this.PROJECTILE_RADIUS) {
+                    this.handlePlanetCollision(planet, planets);
+                    return;
+                 }
+            }
+            
+            // 2. Continuous Collision Detection (Raycast) for high speeds
+            // Check if line from previous position to current position intersects planet radius
+            // We use previous frame position (implied by subtracting velocity, or tracking if accurate)
+            // Ideally we track prevX/prevY, but estimating from velocity is "good enough" for this frame
+            // actually we calculate next position at end of loop, so 'this.x' is current.
+            // We need to check the MOVING segment.
+            
+            // Wait, we loop planets BEFORE moving. So 'this.x' is OLD position.
+            // But we compute forces to get NEW velocity, then move.
+            // The logic below calculates forces.
+            // The movement happens at end of update.
+            // So we should do collision check AFTER movement?
+            // OR checks "swept" volume. 
+            
+            // Current code checks static position 'this.x' against planet.
+            // If we move update logic to start of frame, we can use old/new.
+            
+            // Let's defer this check to AFTER movement loop below?
+            // Or better: keep force logic here, moving logic at bottom, then check collision?
+            // No, standard is: Update Velocity -> Update Position -> Check Collision.
+            
+            // Current order:
+            // 1. Check Collision (at current X)
+            // 2. Calculate Forces
+            // 3. Update Velocity
+            // 4. Update Position
+            
+            // Issue: If we move INTO a planet, we won't detect it until NEXT frame.
+            // If we move THROUGH a planet (start outside, end outside), next frame misses it too.
+            
+            // Fix: Move collision check to AFTER position update.
+            // AND use raycast from oldPos to newPos.
+            
+            // Let's refactor the loop.
+            // 1. Calculate all forces FIRST.
+            // 2. Move.
+            // 3. Check collisions (Raycast).
+        }
+        
+        // 1. Calculate Forces
+        for (const planet of planets) {
+            const dx = planet.position.x - this.x;
+            const dy = planet.position.y - this.y;
+            const distSq = dx * dx + dy * dy;
+            
+            // Optimization: Influence check
+            const influenceDist = planet.radiusValue * GravitySystem.INFLUENCE_MULTIPLIER;
+            if (distSq > influenceDist * influenceDist) continue;
+            
+            const dist = Math.sqrt(distSq);
+            
+            const planetMass = planet.radiusValue * planet.radiusValue;
+            const clampedDist = Math.max(dist, planet.radiusValue * 0.3);
+            const clampedDistSq = clampedDist * clampedDist;
+            
+            let forceMagnitude = (GravitySystem.G * planetMass) / clampedDistSq;
+            forceMagnitude *= this.PROJECTILE_MASS;
+            
+            forceX += (dx / dist) * forceMagnitude;
+            forceY += (dy / dist) * forceMagnitude;
+        }
+
+        // 2. Integrate Physics
+        const accelX = forceX / this.PROJECTILE_MASS;
+        const accelY = forceY / this.PROJECTILE_MASS;
+        
+        this.velX += accelX;
+        this.velY += accelY;
+        
+        const prevX = this.x;
+        const prevY = this.y;
+        
+        this.x += this.velX;
+        this.y += this.velY;
+        this.setPosition(this.x, this.y);
+
+        // 3. Collision Detection (CCD)
+        const checkLineCircleIntersect = (x1: number, y1: number, x2: number, y2: number, cx: number, cy: number, r: number): boolean => {
+             const dx = x2 - x1;
+             const dy = y2 - y1;
+             const fx = x1 - cx;
+             const fy = y1 - cy;
+             const a = dx*dx + dy*dy;
+             const b = 2*(fx*dx + fy*dy);
+             const c = (fx*fx + fy*fy) - r*r;
+             let discriminant = b*b - 4*a*c;
+             if (discriminant < 0) return false;
+             discriminant = Math.sqrt(discriminant);
+             const t1 = (-b - discriminant) / (2*a);
+             const t2 = (-b + discriminant) / (2*a);
+             return (t1 >= 0 && t1 <= 1) || (t2 >= 0 && t2 <= 1);
+        };
+
+        for (const planet of planets) {
+            const dist = Phaser.Math.Distance.Between(this.x, this.y, planet.position.x, planet.position.y);
+
+            // Turrets
+            const TURRET_HIT_RADIUS_SQ = 15 * 15;
+            for (const turret of planet.turretsList) {
+                const tDistSq = Phaser.Math.Distance.Squared(this.x, this.y, turret.position.x, turret.position.y);
+                if (tDistSq < TURRET_HIT_RADIUS_SQ) {
+                     this.handleTurretHit(planets);
+                     return;
+                }
+            }
+            
+            // Planet Surface (CCD)
+            // effective radius for raycast (slightly forgiving)
+            const hitRadius = planet.radiusValue + this.PROJECTILE_RADIUS;
+            
+            // A. Point Check (Existing logic)
+            if (dist < hitRadius) {
+                 const distToSurface = planet.getDistanceToSurface(this.x, this.y);
+                 if (distToSurface <= this.PROJECTILE_RADIUS) {
+                    this.handlePlanetCollision(planet, planets);
+                    return;
+                 }
+            }
+
+            // B. Raycast Check (Tunneling prevention)
+            // If we crossed the bounding sphere, we check sub-steps to see if we hit ACTUAL terrain.
+            // This prevents "Phantom Surface" hits at the bounding radius (craters).
+            if (dist < hitRadius + 50) { 
+                if (checkLineCircleIntersect(prevX, prevY, this.x, this.y, planet.position.x, planet.position.y, hitRadius)) {
+                    // We crossed the bounding sphere. Now verify terrain collision.
+                    // Sub-step from prev to current
+                    const STEPS = 5;
+                    for (let i = 1; i <= STEPS; i++) {
+                        const t = i / STEPS;
+                        const subX = prevX + (this.x - prevX) * t;
+                        const subY = prevY + (this.y - prevY) * t;
+                        
+                        const subDistToSurface = planet.getDistanceToSurface(subX, subY);
+                        if (subDistToSurface <= this.PROJECTILE_RADIUS) {
+                             // Hit actual ground during travel
+                             this.x = subX; // Snap to hit position (optional, but good for accuracy)
+                             this.y = subY;
+                             this.handlePlanetCollision(planet, planets);
+                             return;
+                        }
+                    }
+                }
+            }
+        }
+
+        // General Mid-Air Collision (All Projectiles)
+        // Check if we hit any enemy projectile directly
+        const COLLISION_RADIUS = 10; // Direct hit radius
+        for (const other of projectiles) {
+            if (other === this) continue;
+            if (!other.body && !other.scene) continue; // Skip destroyed
+            if (this.teamId && other.teamId && this.teamId === other.teamId) continue; // No friendly fire
+
+            const distSq = Phaser.Math.Distance.Squared(this.x, this.y, other.x, other.y);
+            if (distSq < COLLISION_RADIUS * COLLISION_RADIUS) {
+                // Mutual Destruction
+                FXManager.getInstance().createExplosion(this.x, this.y, 0xffaa00, 20); // Small explosion
+                
+                other.destroy();
+                if (this.scene) (this.scene as any).removeProjectile(other);
+                
+                this.destroy();
+                if (this.scene) (this.scene as any).removeProjectile(this);
+                return;
+            }
+        }
+
+        // Defender Logic - intercept enemy projectiles
         if (this.projectileType === ProjectileType.DEFENDER) {
             const stats = PROJECTILE_DATA[this.projectileType];
             const radius = stats.explosionRadius;
@@ -86,20 +254,17 @@ export class Projectile extends Phaser.GameObjects.Sprite {
             // Find enemy projectiles in range
             const targets = projectiles.filter(p => {
                 if (p === this) return false;
-                if (!p.bodyId || !p.bodyId.isValid()) return false;
                 
                 // Check team (intercept enemies)
                 if (this.teamId && p.teamId && this.teamId === p.teamId) return false;
                 
-                const dist = Phaser.Math.Distance.Between(translation.x, translation.y, p.position.x, p.position.y);
+                const dist = Phaser.Math.Distance.Between(this.x, this.y, p.x, p.y);
                 return dist <= radius;
             });
 
             if (targets.length > 0) {
                  // Explode
-                 import('../logic/FXManager').then(({ FXManager }) => {
-                      FXManager.getInstance().createExplosion(translation.x, translation.y, stats.color, radius);
-                 });
+                 FXManager.getInstance().createExplosion(this.x, this.y, stats.color, radius);
 
                  // Destroy targets
                  targets.forEach(t => {
@@ -121,7 +286,7 @@ export class Projectile extends Phaser.GameObjects.Sprite {
             let minDist = Infinity;
             
             for (const p of planets) {
-                const surfaceDist = p.getDistanceToSurface(translation.x, translation.y);
+                const surfaceDist = p.getDistanceToSurface(this.x, this.y);
                 if (surfaceDist < minDist) {
                     minDist = surfaceDist;
                     nearest = p;
@@ -130,131 +295,183 @@ export class Projectile extends Phaser.GameObjects.Sprite {
 
             // Smart Landing System
             if (nearest) {
-                const vel = this.bodyId.linvel();
-                const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
-                const moveAngle = Math.atan2(vel.y, vel.x);
+                const speed = Math.sqrt(this.velX * this.velX + this.velY * this.velY);
+                const moveAngle = Math.atan2(this.velY, this.velX);
 
-                // 1. Calculate Closest Point of Approach (CPA) to see if we are on a collision course
-                // Vector to planet center
-                const toPlanetX = nearest.position.x - translation.x;
-                const toPlanetY = nearest.position.y - translation.y;
+                // Calculate Closest Point of Approach
+                const toPlanetX = nearest.position.x - this.x;
+                const toPlanetY = nearest.position.y - this.y;
                 
-                // Project 'toPlanet' onto velocity direction
                 // Unit velocity
-                const vx = vel.x / speed;
-                const vy = vel.y / speed;
+                const vx = this.velX / speed;
+                const vy = this.velY / speed;
                 
                 // Dot product: length of projection
                 const dot = toPlanetX * vx + toPlanetY * vy;
                 
                 // Closest point on trajectory line
-                const closestX = translation.x + vx * dot;
-                const closestY = translation.y + vy * dot;
+                const closestX = this.x + vx * dot;
+                const closestY = this.y + vy * dot;
                 
                 // Distance from planet center to this closest point
                 const distToTrajectory = Phaser.Math.Distance.Between(closestX, closestY, nearest.position.x, nearest.position.y);
                 
-                // Are we colliding? (Trajectory passes within radius)
-                // We add a small buffer (e.g. 10px) to be sure
-                const isCollisionCourse = distToTrajectory < (nearest.radiusValue + 10) && dot > 0; // dot > 0 means planet is in front, not behind
+                // Are we on collision course?
+                const isCollisionCourse = distToTrajectory < (nearest.radiusValue + 10) && dot > 0;
 
-                // 2. Levitation / Soft Landing (< 15px)
-                // 2. Levitation / Soft Landing (< 15px)
+                // Levitation / Soft Landing (< 15px)
                 if (isCollisionCourse && minDist < 15) {
-                    // Only hover/damp if moving fast enough to need cushioning
                     if (speed > 4) {
-                        // Anti-gravity levitation to prevent smashing
-                        // Gravity is approx 10-20? We want to counteract it plus slow down.
-                        const hoverForce = 0.8 * this.bodyId.mass();
+                        // Anti-gravity levitation
+                        const hoverForce = 0.8;
                         
                         // Apply force AWAY from planet center
-                        const angleFromPlanet = Math.atan2(translation.y - nearest.position.y, translation.x - nearest.position.x);
+                        const angleFromPlanet = Math.atan2(this.y - nearest.position.y, this.x - nearest.position.x);
                         const hx = Math.cos(angleFromPlanet) * hoverForce;
                         const hy = Math.sin(angleFromPlanet) * hoverForce;
                         
-                        this.bodyId.applyImpulse({ x: hx, y: hy }, true);
+                        this.velX += hx;
+                        this.velY += hy;
                         
-                        // Also damp velocity if too fast
-                        const dampX = -vel.x * 0.1 * this.bodyId.mass();
-                        const dampY = -vel.y * 0.1 * this.bodyId.mass();
-                        this.bodyId.applyImpulse({ x: dampX, y: dampY }, true);
+                        // Damp velocity
+                        this.velX *= 0.9;
+                        this.velY *= 0.9;
                     }
                 }
-                // 3. Suicide Burn (< 60px)
+                // Suicide Burn (< 60px)
                 else if (isCollisionCourse && minDist < 60) {
-                     // Only brake if going fast
-                     const targetSpeed = (minDist / 60) * 30 + 5; // Scale speed down
+                     const targetSpeed = (minDist / 60) * 30 + 5;
                      
                      if (speed > targetSpeed) {
                          // Retro-rockets!
-                         const brakeForce = 2.0 * this.bodyId.mass(); // Strong braking
+                         const brakeForce = 2.0;
                          const brakeX = -vx * brakeForce;
                          const brakeY = -vy * brakeForce;
                          
-                         this.bodyId.applyImpulse({ x: brakeX, y: brakeY }, true);
+                         this.velX += brakeX;
+                         this.velY += brakeY;
                          
                          // Visuals (Exhaust forward)
-                         import('../logic/FXManager').then(({ FXManager }) => {
-                              const offset = 8;
-                              const emitX = translation.x + Math.cos(moveAngle) * offset;
-                              const emitY = translation.y + Math.sin(moveAngle) * offset;
-                              FXManager.getInstance().createThrustEffect(emitX, emitY, moveAngle + Math.PI);
-                         });
+                          const offset = 8;
+                          const emitX = this.x + Math.cos(moveAngle) * offset;
+                          const emitY = this.y + Math.sin(moveAngle) * offset;
+                          FXManager.getInstance().createThrustEffect(emitX, emitY, moveAngle + Math.PI);
                      }
                 }
-                // Else: Slingshot! Do nothing.
             }
         }
 
-        // Cleanup if out of bounds (simple check)
-        if (translation.x < -2000 || translation.x > 4000 || translation.y < -2000 || translation.y > 4000) {
+        // Cleanup if out of bounds
+        if (this.x < -2000 || this.x > 4000 || this.y < -2000 || this.y > 4000) {
            this.destroy();
            if (this.scene) (this.scene as any).removeProjectile(this);
            return;
         }
+    }
+    
+    private handleTurretHit(planets: import('./Planet').Planet[]) {
+        if (this.processed) return;
+        this.processed = true;
 
-        // DEBUG: Show Velocity
-        /*
-        if (!this.getData('debugText')) {
-             const text = this.scene.add.text(this.x, this.y, '', { fontSize: '10px', color: '#fff' });
-             this.setData('debugText', text);
+        const stats = PROJECTILE_DATA[this.projectileType];
+        
+        // Explode at Projectile position
+        FXManager.getInstance().createExplosion(this.x, this.y, stats.color, stats.explosionRadius);
+        
+        // Deal damage
+        if (this.scene) {
+             const cm = (this.scene as any).combatManager;
+             if (cm) {
+                 // Correct signature: x, y, radius, maxDamage, planets, pushForce
+                 cm.applyRadialDamage(
+                    this.x, 
+                    this.y, 
+                    stats.explosionRadius, 
+                    this.damage,
+                    planets,
+                    stats.pushForce
+                );
+             }
         }
-        const text = this.getData('debugText') as Phaser.GameObjects.Text;
-        if (text) {
-             const vel = this.bodyId.linvel();
-             text.setPosition(this.x + 10, this.y - 10);
-             text.setText(`v: ${vel.x.toFixed(1)}, ${vel.y.toFixed(1)}`);
+        
+        this.destroy();
+        if (this.scene) (this.scene as any).removeProjectile(this);
+    }
+
+    private handlePlanetCollision(planet: import('./Planet').Planet, planets: import('./Planet').Planet[]) {
+        // Guard against double-processing
+        if (this.processed) return;
+        this.processed = true;
+        
+        const stats = PROJECTILE_DATA[this.projectileType];
+        
+        // Capture scene and position before potential destruction
+        const scene = this.scene;
+        const x = this.x;
+        const y = this.y;
+        
+        if (!scene) return; // Should not happen but safety check
+        
+        // Colonizer landing
+        if (this.projectileType === ProjectileType.COLONIZER) {
+            // Calculate angle for turret placement
+            const angle = Math.atan2(y - planet.position.y, x - planet.position.x);
+            planet.addTurretAtAngle(angle, this.teamId);
+            
+            // Landing effect
+            FXManager.getInstance().createExplosion(x, y, stats.color, stats.explosionRadius);
+            
+            this.destroy();
+            if (scene) (scene as any).removeProjectile(this);
+            return;
         }
-        */
+        
+        // Regular projectile collision
+        
+        // Create explosion effect
+        FXManager.getInstance().createExplosion(x, y, stats.color, stats.explosionRadius);
+        
+        // Deal damage to planet (takeDamage signature: worldX, worldY, radius)
+        if (this.damage > 0) {
+            planet.takeDamage(x, y, stats.explosionRadius);
+        }
+        
+        // Apply radial damage to turrets
+        const combatManager = (scene as any).combatManager;
+        if (combatManager) {
+            // Use passed planets array and pushForce
+            combatManager.applyRadialDamage(
+                x, 
+                y, 
+                stats.explosionRadius, 
+                this.damage, 
+                planets,
+                stats.pushForce
+            );
+        }
+        
+        // Destroy projectile
+        this.destroy();
+        if (scene) (scene as any).removeProjectile(this);
     }
     
     destroy(fromScene?: boolean) {
-        // const text = this.getData('debugText');
-        // if (text) text.destroy();
-
-        if (this.world && this.bodyId.isValid()) {
-            this.world.removeRigidBody(this.bodyId);
-        }
         super.destroy(fromScene);
     }
 
     applyForce(x: number, y: number) {
-        if (this.bodyId.isValid()) {
-            this.bodyId.addForce({ x, y }, true);
-        }
+        // Convert force to acceleration and apply to velocity
+        const accelX = x / this.PROJECTILE_MASS;
+        const accelY = y / this.PROJECTILE_MASS;
+        this.velX += accelX;
+        this.velY += accelY;
     }
 
     getMass(): number {
-        if (this.bodyId.isValid()) {
-            return this.bodyId.mass();
-        }
-        return 1;
+        return this.PROJECTILE_MASS;
     }
 
     get position(): { x: number, y: number } {
-        if (this.bodyId.isValid()) {
-            return this.bodyId.translation();
-        }
         return { x: this.x, y: this.y };
     }
 }

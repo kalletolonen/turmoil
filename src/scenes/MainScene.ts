@@ -229,8 +229,8 @@ export class MainScene extends Phaser.Scene {
     const shouldStep = this.turnManager.update(delta);
 
     if (shouldStep) {
-        GravitySystem.applyGravity(this.projectiles, this.planets);
-
+        // Projectiles now handle their own gravity internally
+        
         // Apply gravity to falling turrets
         const fallingTurrets: Turret[] = [];
         this.planets.forEach(p => {
@@ -268,12 +268,17 @@ export class MainScene extends Phaser.Scene {
     // However, if we didn't step, could there be events? No.
     
     
-    // Prediction handling during PLANNING
-    if (this.turnManager.currentPhase === TurnPhase.PLANNING) {
+    
+    // Prediction handling - show during PLANNING and EXECUTION
+    if (this.turnManager.currentPhase === TurnPhase.PLANNING || 
+        this.turnManager.currentPhase === TurnPhase.EXECUTION) {
         this.graphics.clear();
-        
         this.trajectorySystem.predictTrajectory(this.graphics);
+    } else {
+        // Clear trajectories during other phases
+        this.graphics.clear();
     }
+    
     
     // Update Phase Text
     const phaseText = this.data.get('phaseText') as Phaser.GameObjects.Text;
@@ -296,7 +301,7 @@ export class MainScene extends Phaser.Scene {
                  const speed = Math.sqrt(t.aimVector.x * t.aimVector.x + t.aimVector.y * t.aimVector.y);
                  
                  const pos = t.position;
-                 const tipLen = 15;
+                 const tipLen = GameConfig.PROJECTILE_SPAWN_OFFSET;
                   const tipX = pos.x + Math.cos(angle) * tipLen;
                   const tipY = pos.y + Math.sin(angle) * tipLen;
                   
