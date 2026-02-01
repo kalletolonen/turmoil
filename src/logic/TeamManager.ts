@@ -57,6 +57,10 @@ export class TeamManager {
         return team;
     }
 
+    public reset(): void {
+        this.teams = [];
+    }
+
     public getTeam(id: string): Team | undefined {
         return this.teams.find(t => t.id === id);
     }

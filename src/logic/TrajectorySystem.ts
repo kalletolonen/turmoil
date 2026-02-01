@@ -106,7 +106,7 @@ export class TrajectorySystem {
         // 1. Add already armed turrets
         this.scene.planets.forEach(p => {
             p.turretsList.forEach(t => {
-                if (t === this.scene.inputManager.draggingTurret) return;
+                if (this.scene.inputManager && t === this.scene.inputManager.draggingTurret) return;
                 
                 // Filter AI trajectories
                 const team = this.scene.teamManager.getTeam(t.teamId || '');
@@ -144,7 +144,7 @@ export class TrajectorySystem {
         });
         
         // 2. Add currently dragged turret prediction
-        if (this.scene.inputManager.draggingTurret && this.scene.inputManager.dragCurrentPos) {
+        if (this.scene.inputManager && this.scene.inputManager.draggingTurret && this.scene.inputManager.dragCurrentPos) {
             const t = this.scene.inputManager.draggingTurret;
             const start = t.position;
             const current = { x: this.scene.inputManager.dragCurrentPos.x, y: this.scene.inputManager.dragCurrentPos.y };

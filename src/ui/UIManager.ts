@@ -343,6 +343,36 @@ export class UIManager {
         });
     }
 
+    public createMenuButton() {
+        const x = 20;
+        const y = 20;
+        
+        const container = this.uiScene.add.container(x, y);
+        container.setScrollFactor(0);
+        container.setDepth(2000);
+
+        const bg = this.uiScene.add.rectangle(0, 0, 100, 40, 0x333333)
+            .setOrigin(0)
+            .setStrokeStyle(2, 0xffffff);
+
+        const text = this.uiScene.add.text(50, 20, 'MENU', {
+            fontSize: '18px',
+            color: '#ffffff'
+        }).setOrigin(0.5);
+
+        container.add([bg, text]);
+        
+        bg.setInteractive({ useHandCursor: true })
+          .on('pointerover', () => bg.setFillStyle(0x555555))
+          .on('pointerout', () => bg.setFillStyle(0x333333))
+          .on('pointerdown', () => {
+              // Return to Menu
+              this.scene.scene.stop('MainScene');
+              this.scene.scene.stop('UIScene');
+              this.scene.scene.start('MenuScene');
+          });
+    }
+
     public isPointerOverUI(pointer: Phaser.Input.Pointer): boolean {
         // 1. Check Weapon UI (Bottom Bar)
         // Explicitly check visibility and bounds

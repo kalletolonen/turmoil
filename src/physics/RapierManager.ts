@@ -59,6 +59,28 @@ export class RapierManager {
     const newWorld = RAPIER.World.restoreSnapshot(snapshot);
     return newWorld;
   }
+
+  /**
+   * Clears the physics world, destroying all bodies and colliders.
+   * Should be called when restarting a scene.
+   */
+  public reset(): void {
+      if (this.world) {
+          this.world.free();
+          this.world = null;
+      }
+      this.isInitialized = false; 
+      // We set initialized to false so init() will create a new world.
+      // Alternatively, we just create a new world here?
+      // init() is async because of RAPIER.init().
+      // But we don't need to re-run RAPIER.init() (the WASM part).
+      // We just need a new RAPIER.World.
+      
+      this.world = new RAPIER.World(RapierManager.GRAVITY);
+      this.eventQueue = new RAPIER.EventQueue(true);
+      this.isInitialized = true; // Still initialized
+      console.log("Rapier World Reset");
+  }
   
   public get bodyCount(): number {
       return this.world ? this.world.bodies.len() : 0;

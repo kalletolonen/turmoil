@@ -7,10 +7,10 @@ import defenderIcon from '../objects/graphics/weapons/defender.jpg';
 import radarIcon from '../objects/graphics/weapons/radar.jpg';
 import turretSprite from '../objects/graphics/weapons/turret.png';
 import { TurnManager, TurnPhase } from '../logic/TurnManager';
-import { FleetRenderer } from '../renderer/FleetRenderer';
+// import { FleetRenderer } from '../renderer/FleetRenderer';
 import { SeededRNG } from '../logic/SeededRNG';
 import { Planet } from '../objects/Planet';
-import { Debris } from '../objects/Debris';
+// import { Debris } from '../objects/Debris';
 import { Projectile } from '../objects/Projectile';
 import { Turret } from '../objects/Turret';
 import { ProjectileType } from '../objects/ProjectileTypes';
@@ -32,10 +32,10 @@ export class MainScene extends Phaser.Scene {
   public teamManager: TeamManager;
   public aiManager: AIManager;
   public turnManager: TurnManager;
-  private fleetRenderer!: FleetRenderer;
+  // private fleetRenderer!: FleetRenderer; 
   private rng: SeededRNG;
   public planets: Planet[] = [];
-  private debris: Debris[] = [];
+  // private debris: Debris[] = [];
   private initialized = false;
   private graphics!: Phaser.GameObjects.Graphics;
   private projectiles: Projectile[] = [];
@@ -60,8 +60,25 @@ export class MainScene extends Phaser.Scene {
     this.teamManager = new TeamManager();
     this.aiManager = new AIManager();
     this.turnManager = new TurnManager();
+    // Default RNG - will be overwritten in init
     this.rng = new SeededRNG(GameConfig.SEED);
   }
+
+  init(data: { isMenuBackground?: boolean; seed?: number }) {
+    this.isMenuBackground = data.isMenuBackground || false;
+    const seed = data.seed !== undefined ? data.seed : GameConfig.SEED;
+    this.rng = new SeededRNG(seed);
+    
+    // Clear State
+    this.planets = [];
+    this.projectiles = [];
+    this.selectedTurret = null;
+    this.teamManager.reset(); // Clear old teams
+    
+    console.log(`Initializing MainScene. Background: ${this.isMenuBackground}, Seed: ${seed}`);
+  }
+
+  public isMenuBackground: boolean = false;
 
   preload() {
     // Assets would go here
@@ -76,6 +93,9 @@ export class MainScene extends Phaser.Scene {
   async create() {
     // 1. Init Physics
     await this.rapierManager.init();
+    
+    // Always reset physics world to clear old bodies from previous scenes
+    this.rapierManager.reset();
     
     // Fix for Android Touch Action (Scroll blocking)
     this.game.canvas.style.touchAction = 'none';
@@ -93,7 +113,7 @@ export class MainScene extends Phaser.Scene {
     );
 
     // 2. Setup Renderer
-    this.fleetRenderer = new FleetRenderer(this); // Pass 'this' as scene
+    // this.fleetRenderer = new FleetRenderer(this); // Pass 'this' as scene
     this.graphics = this.add.graphics();
     this.graphics.setDepth(1000);
 
@@ -133,10 +153,10 @@ export class MainScene extends Phaser.Scene {
         const mapData = mapGen.generate({
             width: mapWidth,
             height: mapHeight,
-            planetCount: 12, // Increased from 6
-            minPlanetRadius: 50, // Increased from 25
-            maxPlanetRadius: 120, // Increased from 70
-            padding: 200 // Increased padding for larger planets
+            planetCount: 8, // Reduced from 12 to prevent overcrowding
+            minPlanetRadius: 40, // Slightly reduced
+            maxPlanetRadius: 100, // Slightly reduced
+            padding: 50 // Reduced padding to fit planets in 800x600
         }, this.rng);
 
         mapData.planets.forEach((pData) => {
@@ -236,22 +256,32 @@ export class MainScene extends Phaser.Scene {
            // this.updateTeamUI();
      }
 
-     const uiScene = this.scene.get('UIScene');
-     this.uiManager = new UIManager(this, uiScene);
-     this.uiManager.createWeaponSelectionUI();
-     this.uiManager.createDebugUI();
-     this.uiManager.createFireButton();
-     
-     this.inputManager = new InputManager(this);
-     this.inputManager.handleInput();
-     
-     // Handle Audio Context Resume
-     this.input.on('pointerdown', () => {
-         const soundManager = this.sound as Phaser.Sound.WebAudioSoundManager;
-         if (soundManager.context && soundManager.context.state === 'suspended') {
-             soundManager.context.resume();
+     if (!this.isMenuBackground) {
+         // Ensure UI Scene is running
+         if (!this.scene.isActive('UIScene')) {
+             this.scene.launch('UIScene');
+             this.scene.bringToTop('UIScene');
          }
-     });
+         
+         const uiScene = this.scene.get('UIScene');
+         this.uiManager = new UIManager(this, uiScene);
+         // ... (rest is same)
+         this.uiManager.createWeaponSelectionUI();
+         this.uiManager.createDebugUI();
+         this.uiManager.createFireButton();
+         this.uiManager.createMenuButton(); // New Method
+         
+         this.inputManager = new InputManager(this);
+         this.inputManager.handleInput();
+         
+         // Handle Audio Context Resume
+         this.input.on('pointerdown', () => {
+             const soundManager = this.sound as Phaser.Sound.WebAudioSoundManager;
+             if (soundManager.context && soundManager.context.state === 'suspended') {
+                 soundManager.context.resume();
+             }
+         });
+     }
 
      this.trajectorySystem = new TrajectorySystem(this);
      
@@ -278,7 +308,9 @@ export class MainScene extends Phaser.Scene {
     if (!this.initialized) return;
 
     // Convert delta to ms
-    const shouldStep = this.turnManager.update(delta);
+    // Convert delta to ms
+    // Only run turn manager if NOT menu background
+    const shouldStep = !this.isMenuBackground ? this.turnManager.update(delta) : false;
 
     if (shouldStep) {
         // Projectiles now handle their own gravity internally
@@ -327,13 +359,13 @@ export class MainScene extends Phaser.Scene {
         FXManager.getInstance().update(delta);
     }
 
-    if (this.turnManager.currentPhase === TurnPhase.PLANNING) {
+    if (this.turnManager.currentPhase === TurnPhase.PLANNING && this.uiManager) {
         this.uiManager.updateWeaponSelectionUI();
     }
 
     // Prediction handling - show during PLANNING and EXECUTION
-    if (this.turnManager.currentPhase === TurnPhase.PLANNING || 
-        this.turnManager.currentPhase === TurnPhase.EXECUTION) {
+    if (!this.isMenuBackground && (this.turnManager.currentPhase === TurnPhase.PLANNING || 
+        this.turnManager.currentPhase === TurnPhase.EXECUTION)) {
         this.graphics.clear();
         this.trajectorySystem.predictTrajectory(this.graphics);
     } else {
