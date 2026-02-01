@@ -40,6 +40,8 @@ export class Projectile extends Phaser.GameObjects.Sprite {
     }
 
     update(planets: import('./Planet').Planet[] = [], projectiles: Projectile[] = []) {
+        if (!this.active) return;
+
         // Apply gravity forces (matching TrajectorySystem and GravitySystem)
         let forceX = 0;
         let forceY = 0;
@@ -296,7 +298,7 @@ export class Projectile extends Phaser.GameObjects.Sprite {
             // Smart Landing System
             if (nearest) {
                 const speed = Math.sqrt(this.velX * this.velX + this.velY * this.velY);
-                const moveAngle = Math.atan2(this.velY, this.velX);
+                // const moveAngle = Math.atan2(this.velY, this.velX);
 
                 // Calculate Closest Point of Approach
                 const toPlanetX = nearest.position.x - this.x;
@@ -316,8 +318,8 @@ export class Projectile extends Phaser.GameObjects.Sprite {
                 // Distance from planet center to this closest point
                 const distToTrajectory = Phaser.Math.Distance.Between(closestX, closestY, nearest.position.x, nearest.position.y);
                 
-                // Are we on collision course?
-                const isCollisionCourse = distToTrajectory < (nearest.radiusValue + 10) && dot > 0;
+                // Are we on collision course? (Forgiving check for mountains)
+                const isCollisionCourse = distToTrajectory < (nearest.radiusValue * 1.5) && dot > 0;
 
                 // Levitation / Soft Landing (< 15px)
                 if (isCollisionCourse && minDist < 15) {
@@ -338,26 +340,6 @@ export class Projectile extends Phaser.GameObjects.Sprite {
                         this.velY *= 0.9;
                     }
                 }
-                // Suicide Burn (< 60px)
-                else if (isCollisionCourse && minDist < 60) {
-                     const targetSpeed = (minDist / 60) * 30 + 5;
-                     
-                     if (speed > targetSpeed) {
-                         // Retro-rockets!
-                         const brakeForce = 2.0;
-                         const brakeX = -vx * brakeForce;
-                         const brakeY = -vy * brakeForce;
-                         
-                         this.velX += brakeX;
-                         this.velY += brakeY;
-                         
-                         // Visuals (Exhaust forward)
-                          const offset = 8;
-                          const emitX = this.x + Math.cos(moveAngle) * offset;
-                          const emitY = this.y + Math.sin(moveAngle) * offset;
-                          FXManager.getInstance().createThrustEffect(emitX, emitY, moveAngle + Math.PI);
-                     }
-                }
             }
         }
 
@@ -377,6 +359,16 @@ export class Projectile extends Phaser.GameObjects.Sprite {
         
         // Explode at Projectile position
         FXManager.getInstance().createExplosion(this.x, this.y, stats.color, stats.explosionRadius);
+        
+        // Apply terrain damage to any nearby planets (if blast radius touches them)
+        if (this.damage > 0) {
+            planets.forEach(p => {
+                const dist = Phaser.Math.Distance.Between(this.x, this.y, p.position.x, p.position.y);
+                if (dist < p.radiusValue + stats.explosionRadius) {
+                    p.takeDamage(this.x, this.y, stats.explosionRadius);
+                }
+            });
+        }
         
         // Deal damage
         if (this.scene) {

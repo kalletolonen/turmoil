@@ -15,6 +15,7 @@ export interface ProjectileStats {
     color: number;
     explosionRadius: number;
     pushForce: number; // New property
+    icon?: string; // Optional icon key
 }
 
 export const PROJECTILE_DATA: Record<ProjectileType, ProjectileStats> = {
@@ -26,7 +27,8 @@ export const PROJECTILE_DATA: Record<ProjectileType, ProjectileStats> = {
         description: 'Standard projectile',
         color: 0xffff00,
         explosionRadius: 20,
-        pushForce: 5
+        pushForce: 5,
+        icon: 'icon_basic'
     },
     [ProjectileType.GIGA_BLASTER]: {
         type: ProjectileType.GIGA_BLASTER,
@@ -35,8 +37,9 @@ export const PROJECTILE_DATA: Record<ProjectileType, ProjectileStats> = {
         name: 'Giga Blaster',
         description: 'High damage projectile',
         color: 0xff00ff,
-        explosionRadius: 35,
-        pushForce: 20
+        explosionRadius: 40,
+        pushForce: 20,
+        icon: 'icon_giga_blaster'
     },
     [ProjectileType.COLONIZER]: {
         type: ProjectileType.COLONIZER,
@@ -46,7 +49,8 @@ export const PROJECTILE_DATA: Record<ProjectileType, ProjectileStats> = {
         description: 'Spawns a turret on impact',
         color: 0x00ffff,
         explosionRadius: 0,
-        pushForce: 0
+        pushForce: 0,
+        icon: 'icon_colonizer'
     },
     [ProjectileType.RADAR]: {
         type: ProjectileType.RADAR,
@@ -56,7 +60,8 @@ export const PROJECTILE_DATA: Record<ProjectileType, ProjectileStats> = {
         description: 'Reveals enemy plans',
         color: 0x00ff00, 
         explosionRadius: 0,
-        pushForce: 0
+        pushForce: 0,
+        icon: 'icon_radar'
     },
     [ProjectileType.DEFENDER]: {
         type: ProjectileType.DEFENDER,
@@ -66,6 +71,7 @@ export const PROJECTILE_DATA: Record<ProjectileType, ProjectileStats> = {
         description: 'Intercepts projectiles',
         color: 0x0000ff,
         explosionRadius: 35,
-        pushForce: 10
+        pushForce: 10,
+        icon: 'icon_defender'
     }
 };

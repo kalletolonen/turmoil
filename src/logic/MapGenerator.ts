@@ -74,15 +74,13 @@ export class MapGenerator {
                     const isNaturalNeutral = rng.nextFloat() < 0.3;
                     let teamId: string | null = null;
                     let color = 0x888888;
-                    let turretCount = 0;
 
-                    if (!isNaturalNeutral) {
+                     if (!isNaturalNeutral) {
                         if (x < config.width / 2) {
                             teamId = 'red';
                         } else {
                             teamId = 'green';
                         }
-                        turretCount = rng.nextInt(2, 6);
                     } else {
                         color = 0x666666;
                     }
@@ -90,7 +88,7 @@ export class MapGenerator {
                     const seed = rng.nextInt(0, 1000000);
 
                     planets.push({
-                        x, y, radius, color, teamId, turretCount, seed
+                        x, y, radius, color, teamId, turretCount: 0, seed
                     });
                     placed = true;
                 }
@@ -100,6 +98,20 @@ export class MapGenerator {
                 console.warn(`Could not find space for planet ${i} after ${MAX_ATTEMPTS} attempts`);
             }
         }
+
+        // Distribute exactly 3 turrets per team
+        const distributeTurrets = (team: string, count: number) => {
+            const teamPlanets = planets.filter(p => p.teamId === team);
+            if (teamPlanets.length === 0) return;
+
+            for (let i = 0; i < count; i++) {
+                const p = teamPlanets[rng.nextInt(0, teamPlanets.length)];
+                p.turretCount++;
+            }
+        };
+
+        distributeTurrets('red', 3);
+        distributeTurrets('green', 3);
 
         return { planets };
     }

@@ -281,7 +281,7 @@ export class CollisionManager {
       
       FXManager.getInstance().createFloatingText(host.position.x, host.position.y, "FUSION!", 0x00ffff);
       
-      host.updateHealthBar();
+      host.updateVisuals();
       
       // Destroy donor
       donor.destroy();

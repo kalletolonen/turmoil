@@ -39,6 +39,7 @@ export class Planet {
             .setTranslation(x, y);
         this.body = rapierManager.world.createRigidBody(bodyDesc);
         (this.body as any).userData = { type: 'planet', parent: this };
+        // Ensure rebuildCollider propagates this type or sets it on colliders
         
         this.rebuildCollider();
 
@@ -263,7 +264,8 @@ export class Planet {
                  // Rapier triangleCollider
                  const triDesc = RAPIER.ColliderDesc.triangle(p1, p2, p3);
                  triDesc.setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
-                 rapierManager.world!.createCollider(triDesc, this.body);
+                 const collider = rapierManager.world!.createCollider(triDesc, this.body);
+                 (collider as any).userData = { type: 'planet' };
              }
         });
     }
@@ -318,7 +320,7 @@ export class Planet {
                 occupiedAngles.push(angle);
                 
                 const surfaceDist = this.getSurfaceDistanceAtAngle(angle);
-                const turretDist = surfaceDist + 5; 
+                const turretDist = surfaceDist + 20; // Offset for 4x scaled turret (radius approx 20)
                 const tx = this.body.translation().x + Math.cos(angle) * turretDist;
                 const ty = this.body.translation().y + Math.sin(angle) * turretDist;
                 
@@ -376,12 +378,12 @@ export class Planet {
                 FXManager.getInstance().createFloatingText(existing!.position.x, existing!.position.y, "FUSION!", 0x00ffff);
              });
 
-             existing.updateHealthBar();
+             existing.updateVisuals();
              return existing;
         }
 
         const surfaceDist = this.getSurfaceDistanceAtAngle(angle);
-        const turretDist = surfaceDist + 5; 
+        const turretDist = surfaceDist + 20; // Offset for 4x scaled turret (radius approx 20)
         const tx = this.body.translation().x + Math.cos(angle) * turretDist;
         const ty = this.body.translation().y + Math.sin(angle) * turretDist;
         
@@ -484,10 +486,14 @@ export class Planet {
         FXManager.getInstance().createDebrisBurst(worldX, worldY, this.color, 5);
 
         // Check for undermined turrets
+        // Note: Turrets spawn at surfaceDist + 20, so threshold must be > 20 to avoid false positives
+        const FALL_THRESHOLD = 30; // 20px spawn offset + 10px buffer
         this.turrets.forEach(turret => {
             if (!turret.isFalling) {
                 const dist = this.getDistanceToSurface(turret.position.x, turret.position.y);
-                if (dist > 5) {
+                // console.log(`[Planet] Ground check: Dist ${dist.toFixed(1)} vs threshold ${FALL_THRESHOLD}`);
+                if (dist > FALL_THRESHOLD) {
+                    console.warn(`[Planet] Turret FALLING! Dist ${dist.toFixed(1)} > ${FALL_THRESHOLD}`);
                     turret.setFalling(true);
                 }
             }

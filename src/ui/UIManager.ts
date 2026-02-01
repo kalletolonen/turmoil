@@ -69,10 +69,18 @@ export class UIManager {
             // Button Background
             const button = this.uiScene.add.image(boxX, boxY, 'white_1x1');
             button.setDisplaySize(itemWidth, buttonHeight);
-            button.setTint(0x444444);
+            button.setTint(0x000000); // Black background
             button.setInteractive({ useHandCursor: true });
             button.setName(`btn_${type}`); // Identify for update
             button.setData('isUI', true);
+
+            // Selection Frame (Stroke)
+            const frame = this.uiScene.add.rectangle(boxX, boxY, itemWidth, buttonHeight);
+            frame.setStrokeStyle(3, 0x4444ff); // Blue width 3
+            frame.setFillStyle(0, 0); // Transparent fill
+            frame.setVisible(false);
+            frame.setName(`frame_${type}`);
+            this.weaponUIContainer?.add(frame);
             
             // Click Handler
             button.on('pointerdown', () => {
@@ -84,9 +92,21 @@ export class UIManager {
             this.weaponUIContainer?.add(button);
             
             // Icon/Color
-            const icon = this.uiScene.add.image(boxX, boxY - 15, 'particle');
-            icon.setTint(stats.color);
-            const iconSize = Math.min(20, itemWidth * 0.2); // Scale icon
+            let icon: Phaser.GameObjects.Image;
+            let iconSize: number;
+            
+            if (stats.icon) {
+                // Use custom icon
+                icon = this.uiScene.add.image(boxX, boxY - 15, stats.icon);
+                icon.setTint(0xffffff); // No tint for custom icon
+                iconSize = Math.min(50, itemWidth * 0.5); // Larger for custom icon
+            } else {
+                // Fallback to particle
+                icon = this.uiScene.add.image(boxX, boxY - 15, 'particle');
+                icon.setTint(stats.color);
+                iconSize = Math.min(30, itemWidth * 0.3); // Slightly larger for particles too
+            }
+            
             icon.setDisplaySize(iconSize, iconSize);
             this.weaponUIContainer?.add(icon);
             
@@ -133,13 +153,15 @@ export class UIManager {
                 const stats = PROJECTILE_DATA[type];
                 const isSelected = this.scene.selectedTurret?.projectileType === type;
                 
+                const frame = this.weaponUIContainer?.getByName(`frame_${type}`) as Phaser.GameObjects.Rectangle;
+                
                 // Highlight selection
                 if (isSelected) {
-                     // button.setStrokeStyle(3, 0x4444ff); // Blue selection (Image doesn't support stroke)
-                     // Use Tint to show selection 
-                     button.setTint(0x4444ff);
+                     frame?.setVisible(true);
+                     button.setTint(0x000000); // Keep black
                 } else {
-                     button.setTint(0x444444);
+                     frame?.setVisible(false);
+                     button.setTint(0x000000); // Back to black
                 }
                 
                 // Check affordability
@@ -190,7 +212,8 @@ export class UIManager {
         const wasArmed = turret.armed;
         const savedVector = turret.aimVector;
 
-        // 2. Refund Logic (if Armed)
+        // 2. Refund Logic (if Armed and NOT Radar)
+        // Note: Radar is never "armed", so we don't refund it here (assumed sunk cost)
         if (turret.projectileType !== ProjectileType.RADAR) {
              if (wasArmed) {
                   turret.addActionPoints(currentStats.cost);
@@ -198,24 +221,34 @@ export class UIManager {
              }
         }
         
-        // 3. Switch Type
-        turret.projectileType = newType;
-        
-        // 4. Re-Arm Logic (Try to restore aim)
+        // 3. Handle Switch
         if (newType === ProjectileType.RADAR) {
+             // Strict Check: Must afford 
              if (turret.actionPoints >= newStats.cost) {
                  turret.consumeActionPoints(newStats.cost);
+                 turret.projectileType = newType;
              } else {
-                 console.log("Not enough AP for Radar after switch");
+                 console.log("Cannot afford Radar - Reverting refund if needed");
+                 // If we refunded above, we need to revert that state effectively cancelling the action
+                 if (wasArmed) {
+                     // Re-lock the AP we just refunded
+                     turret.consumeActionPoints(currentStats.cost);
+                     turret.setArmed(true, savedVector ?? undefined);
+                 }
+                 return; // Abort switch
              }
         } else {
-             // Normal Weapon: Check if we can afford to re-arm with saved vector
+             // Normal Weapon Switch
+             turret.projectileType = newType;
+             
+             // Optional Re-Arm Logic
              if (wasArmed && savedVector) {
                  if (turret.actionPoints >= newStats.cost) {
                      turret.consumeActionPoints(newStats.cost);
                      turret.setArmed(true, savedVector);
                  } else {
                      console.log("Not enough AP to maintain shot with new weapon");
+                     // We leave it unarmed, but type is switched. AP refunded.
                  }
              }
         }
@@ -311,7 +344,7 @@ export class UIManager {
                  // Or just set maxActionPoints to 10 too?
                  this.scene.selectedTurret.maxActionPoints = 10; 
                  this.scene.selectedTurret.actionPoints = 10;
-                 this.scene.selectedTurret.updateHealthBar(); // Visual update
+                 this.scene.selectedTurret.updateVisuals(); // Visual update
                  console.log("Maxed AP for selected turret");
              }
         });

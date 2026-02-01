@@ -1,5 +1,11 @@
 import Phaser from 'phaser';
 import { RapierManager } from '../physics/RapierManager';
+import gigaBlasterIcon from '../objects/graphics/weapons/giga_blaster.jpg';
+import colonizerIcon from '../objects/graphics/weapons/colonizer.jpg';
+import basicIcon from '../objects/graphics/weapons/basic.jpg';
+import defenderIcon from '../objects/graphics/weapons/defender.jpg';
+import radarIcon from '../objects/graphics/weapons/radar.jpg';
+import turretSprite from '../objects/graphics/weapons/turret.png';
 import { TurnManager, TurnPhase } from '../logic/TurnManager';
 import { FleetRenderer } from '../renderer/FleetRenderer';
 import { SeededRNG } from '../logic/SeededRNG';
@@ -7,6 +13,7 @@ import { Planet } from '../objects/Planet';
 import { Debris } from '../objects/Debris';
 import { Projectile } from '../objects/Projectile';
 import { Turret } from '../objects/Turret';
+import { ProjectileType } from '../objects/ProjectileTypes';
 import { GravitySystem } from '../logic/GravitySystem';
 import { TeamManager } from '../logic/TeamManager';
 import { AIManager } from '../logic/AIManager';
@@ -57,6 +64,12 @@ export class MainScene extends Phaser.Scene {
 
   preload() {
     // Assets would go here
+    this.load.image('icon_giga_blaster', gigaBlasterIcon);
+    this.load.image('icon_colonizer', colonizerIcon);
+    this.load.image('icon_basic', basicIcon);
+    this.load.image('icon_defender', defenderIcon);
+    this.load.image('icon_radar', radarIcon);
+    this.load.image('turret_sprite', turretSprite);
   }
 
   async create() {
@@ -163,6 +176,17 @@ export class MainScene extends Phaser.Scene {
             // We want to KEEP the graphics (trajectories) or clear them? 
             // Usually we want to clear old trajectories, but keep the projectiles.
             this.graphics.clear();
+
+            // Reset Radar Turrets to Basic (Effect lasts 1 turn)
+            // const { ProjectileType } = await import('../objects/ProjectileTypes');
+            this.planets.forEach(p => {
+                p.turretsList.forEach(t => {
+                    if (t.projectileType === ProjectileType.RADAR) {
+                        t.projectileType = ProjectileType.BASIC;
+                        // Also update visual queue? The UIManager weapon selection might need refresh
+                    }
+                });
+            });
 
             // AP Accumulation Phase
             this.applyAPAccumulation();
@@ -330,7 +354,11 @@ export class MainScene extends Phaser.Scene {
                      const recoilY = -Math.sin(angle) * effectiveRecoil;
                      
                      t.applyImpulse(recoilX, recoilY);
+                     t.applyImpulse(recoilX, recoilY);
                  }
+                 
+                 // Disarm the turret so trajectory prediction stops
+                 t.setArmed(false);
              }
          });
      });
