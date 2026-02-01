@@ -601,7 +601,14 @@ export class MainScene extends Phaser.Scene {
               targets: victoryText,
               scale: { from: 0.5, to: 1.2 },
               duration: 800,
-              ease: 'Bounce.Out'
+              ease: 'Bounce.Out',
+              onComplete: () => {
+                  this.time.delayedCall(3000, () => {
+                      this.scene.stop('MainScene');
+                      this.scene.stop('UIScene');
+                      this.scene.start('MenuScene');
+                  });
+              }
           });
       }
   }
