@@ -16,6 +16,7 @@ export class Turret {
     public projectileType: ProjectileType = ProjectileType.BASIC;
     
     public isFalling: boolean = false;
+    public lastLaunchTime: number = 0;
 
     public setFalling(falling: boolean) {
         if (this.isFalling === falling) return;
@@ -25,11 +26,19 @@ export class Turret {
             if (falling) {
                 this.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
                 this.body.wakeUp();
+                this.body.setLinearDamping(0.0); // No air resistance
             } else {
                 this.body.setBodyType(RAPIER.RigidBodyType.Fixed, true);
                 this.body.setLinvel({ x: 0, y: 0 }, true);
                 this.body.setAngvel(0, true);
             }
+        }
+    }
+
+    public nudge(x: number, y: number) {
+        if (this.body) {
+            const pos = this.body.translation();
+            this.body.setTranslation({ x: pos.x + x, y: pos.y + y }, true);
         }
     }
 
@@ -52,6 +61,26 @@ export class Turret {
         return 100; // Default high mass if no body
     }
     
+    public launch(vx: number, vy: number) {
+        if (!this.body) return;
+
+        // 1. Activate Physics
+        this.setFalling(true);
+        this.lastLaunchTime = Date.now();
+
+        // 2. Set as Sensor (Ghost Mode) so it doesn't collide with crater walls immediately
+        // We iterate colliders attached to this body
+         const numColliders = this.body.numColliders();
+         for (let i = 0; i < numColliders; i++) {
+             const collider = this.body.collider(i);
+             collider.setSensor(true);
+         }
+
+        // 3. Apply Velocity directly (Impulse is additive, Velocity is absolute)
+        // This overrides any previous stops
+        this.body.setLinvel({ x: vx, y: vy }, true);
+    }
+
     public update() {
         if (this.body) {
             const pos = this.body.translation();
@@ -63,6 +92,18 @@ export class Turret {
             if (this.isFalling) {
                  this.updateVisuals();
                  this.updateSelectionBracket();
+
+                 // Check Ghost Mode Expiry
+                 if (Date.now() - this.lastLaunchTime > 500) {
+                     // Revert to Solid
+                     const numColliders = this.body.numColliders();
+                     for (let i = 0; i < numColliders; i++) {
+                         const collider = this.body.collider(i);
+                         if (collider.isSensor()) {
+                             collider.setSensor(false);
+                         }
+                     }
+                 }
             }
         }
     }

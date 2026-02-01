@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { ProjectileType, PROJECTILE_DATA } from './ProjectileTypes';
 import { GravitySystem } from '../logic/GravitySystem';
 import { FXManager } from '../logic/FXManager';
+import { GameConfig } from '../config';
 
 export class Projectile extends Phaser.GameObjects.Sprite {
     public damage: number;
@@ -11,7 +12,9 @@ export class Projectile extends Phaser.GameObjects.Sprite {
     private velX: number;
     private velY: number;
     private readonly PROJECTILE_RADIUS = 5;
+    private readonly PROJECTILE_RADIUS = 5;
     private readonly PROJECTILE_MASS = 1.0;
+    public lifespan: number = 10000; // 10 seconds default
 
     constructor(
         scene: Phaser.Scene, 
@@ -343,11 +346,28 @@ export class Projectile extends Phaser.GameObjects.Sprite {
             }
         }
 
-        // Cleanup if out of bounds
-        if (this.x < -2000 || this.x > 4000 || this.y < -2000 || this.y > 4000) {
+        // Cleanup if out of bounds (Buffer of 500px)
+        const buffer = 500;
+        const bounds = {
+            minX: -buffer,
+            maxX: GameConfig.MAP_WIDTH + buffer,
+            minY: -buffer,
+            maxY: GameConfig.MAP_HEIGHT + buffer
+        };
+
+        if (this.x < bounds.minX || this.x > bounds.maxX || this.y < bounds.minY || this.y > bounds.maxY) {
            this.destroy();
            if (this.scene) (this.scene as any).removeProjectile(this);
            return;
+        }
+
+        // Lifespan (10 seconds)
+        // We can approximate by tracking update calls or adding a timer property
+        this.lifespan -= 16; // Approx 16ms per frame
+        if (this.lifespan <= 0) {
+            this.destroy();
+            if (this.scene) (this.scene as any).removeProjectile(this);
+            return;
         }
     }
     

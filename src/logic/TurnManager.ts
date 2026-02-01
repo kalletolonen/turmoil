@@ -11,6 +11,7 @@ export class TurnManager {
   
   // Callback hooks for scene integration
   public onPhaseChange?: (phase: TurnPhase) => void;
+  public checkBusy?: () => boolean;
 
   constructor() {
     this.enterPlanningPhase();
@@ -34,13 +35,13 @@ export class TurnManager {
 
   public update(dt: number): boolean {
     if (this.currentPhase === TurnPhase.EXECUTION) {
+      
       this.executionTimer += dt;
       
       // Check if execution time is over
       if (this.executionTimer >= this.EXECUTION_DURATION_MS) {
         this.finishExecution();
-        return false; // Stop executing physics this frame if we just finished?
-        // Actually, usually we finish exactly at the end.
+        return false; 
       }
       return true; // Should step physics
     }

@@ -92,6 +92,9 @@ export class CollisionManager {
             const planet = (pBody as any).userData.parent as Planet;
 
             if (turret && turret.isFalling) {
+                // Grace Period Check (1 second)
+                if (Date.now() - turret.lastLaunchTime < 1000) return;
+
                 // Check if we should land
                 const tVel = (tBody as RAPIER.RigidBody).linvel();
                 const dx = turret.position.x - planet.position.x;

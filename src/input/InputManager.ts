@@ -32,7 +32,7 @@ export class InputManager {
          // Camera Controls (Zoom)
          this.scene.input.on('wheel', (_pointer: Phaser.Input.Pointer, _gameObjects: any, _deltaX: number, deltaY: number, _deltaZ: number) => {
              const zoom = this.scene.cameras.main.zoom;
-             const newZoom = Phaser.Math.Clamp(zoom - deltaY * 0.001, 0.1, 2.0);
+             const newZoom = Phaser.Math.Clamp(zoom - deltaY * 0.001, 0.05, 2.0);
              this.scene.cameras.main.setZoom(newZoom);
          });
 
@@ -47,7 +47,7 @@ export class InputManager {
          this.scene.input.on('pointerdown', (pointer: Phaser.Input.Pointer, currentlyOver: Phaser.GameObjects.GameObject[]) => {
              // 1. Check UI
              const clickedUI = currentlyOver.some(obj => obj.getData('isUI'));
-             if (clickedUI) return;
+             if (clickedUI || this.scene.uiManager.isPointerOverUI(pointer)) return;
 
              if (this.scene.turnManager.currentPhase !== TurnPhase.PLANNING) {
                  // Even if not in planning, allow panning?

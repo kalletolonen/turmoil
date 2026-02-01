@@ -8,6 +8,7 @@ export class UIManager {
     private scene: MainScene;
     private uiScene: Phaser.Scene;
     private weaponUIContainer: Phaser.GameObjects.Container | null = null;
+    private fireButtonContainer: Phaser.GameObjects.Container | null = null;
 
     constructor(scene: MainScene, uiScene: Phaser.Scene) {
         this.scene = scene;
@@ -201,56 +202,42 @@ export class UIManager {
         const team = this.scene.teamManager.getTeam(this.scene.selectedTurret.teamId!);
         if (!team) return;
   
-        const currentStats = PROJECTILE_DATA[this.scene.selectedTurret.projectileType];
         const newStats = PROJECTILE_DATA[newType];
         
         if (this.scene.selectedTurret.projectileType === newType) return;
         
         const turret = this.scene.selectedTurret;
         
-        // 1. Save AIM state
-        const wasArmed = turret.armed;
-        const savedVector = turret.aimVector;
-
-        // 2. Refund Logic (if Armed and NOT Radar)
-        // Note: Radar is never "armed", so we don't refund it here (assumed sunk cost)
-        if (turret.projectileType !== ProjectileType.RADAR) {
-             if (wasArmed) {
-                  turret.addActionPoints(currentStats.cost);
-                  turret.setArmed(false);
-             }
+        // 1. Refund/Disarm current weapon
+        // If it was armed, we refund the cost so the user pays for the new weapon when they arm it.
+        if (turret.armed && turret.projectileType !== ProjectileType.RADAR) {
+             const stats = PROJECTILE_DATA[turret.projectileType];
+             turret.addActionPoints(stats.cost);
+             turret.setArmed(false);
         }
         
-        // 3. Handle Switch
+        // 2. Handle Switch
         if (newType === ProjectileType.RADAR) {
-             // Strict Check: Must afford 
+             // Radar Logic (Preserved: Instant consumption? or change to aim?)
+             // Assuming Radar is special and consumes on select as per previous logic, 
+             // OR if we want consistency, we should let it be just a type switch and pay on use.
+             // However, current valid logic for Radar in previous code was:
+             // "Strict Check: Must afford... consumeActionPoints"
+             // If we want "Select then Aim" for everything, we should probably treat Radar same as others?
+             // But let's stick to just removing the "Re-arm" logic for now which was the specific "trajectory" request.
+             
              if (turret.actionPoints >= newStats.cost) {
                  turret.consumeActionPoints(newStats.cost);
                  turret.projectileType = newType;
              } else {
-                 console.log("Cannot afford Radar - Reverting refund if needed");
-                 // If we refunded above, we need to revert that state effectively cancelling the action
-                 if (wasArmed) {
-                     // Re-lock the AP we just refunded
-                     turret.consumeActionPoints(currentStats.cost);
-                     turret.setArmed(true, savedVector ?? undefined);
-                 }
-                 return; // Abort switch
+                 console.log("Cannot afford Radar");
+                 return; 
              }
         } else {
              // Normal Weapon Switch
              turret.projectileType = newType;
              
-             // Optional Re-Arm Logic
-             if (wasArmed && savedVector) {
-                 if (turret.actionPoints >= newStats.cost) {
-                     turret.consumeActionPoints(newStats.cost);
-                     turret.setArmed(true, savedVector);
-                 } else {
-                     console.log("Not enough AP to maintain shot with new weapon");
-                     // We leave it unarmed, but type is switched. AP refunded.
-                 }
-             }
+             // NO Re-Arming. User must aim again.
         }
         
         // Visual update
@@ -262,7 +249,7 @@ export class UIManager {
         const height = this.uiScene.scale.height;
 
         // Bottom Right
-        const btnRadius = 40;
+        const btnRadius = 60; // Increased size
         const x = width - btnRadius - 20;
         const y = height - btnRadius - 140; // Above weapon selector (120 height)
 
@@ -271,16 +258,22 @@ export class UIManager {
         container.setDepth(2000);
 
         const circle = this.uiScene.add.circle(0, 0, btnRadius, 0xff0000);
-        circle.setStrokeStyle(2, 0xffffff);
+        circle.setStrokeStyle(3, 0xffffff); // Thicker stroke
         circle.setInteractive({ useHandCursor: true });
         
-        const text = this.uiScene.add.text(0, 0, 'FIRE!', { 
-            fontSize: '18px', 
-            color: '#ffffff',
+        // Stacked Text
+        const textFire = this.uiScene.add.text(0, -10, 'FIRE', { 
+            fontSize: '32px', // Bigger
+            color: '#000000', // Black
             fontStyle: 'bold'
         }).setOrigin(0.5);
 
-        container.add([circle, text]);
+        const textSpace = this.uiScene.add.text(0, 20, '(press space)', { 
+            fontSize: '14px', // Bigger
+            color: '#000000', // Black
+        }).setOrigin(0.5);
+
+        container.add([circle, textFire, textSpace]);
 
         circle.on('pointerdown', () => {
             if (this.scene.turnManager.currentPhase === TurnPhase.PLANNING) {
@@ -348,5 +341,26 @@ export class UIManager {
                  console.log("Maxed AP for selected turret");
              }
         });
+    }
+
+    public isPointerOverUI(pointer: Phaser.Input.Pointer): boolean {
+        // 1. Check Weapon UI (Bottom Bar)
+        // Explicitly check visibility and bounds
+        if (this.weaponUIContainer && this.weaponUIContainer.visible) {
+            const uiHeight = 120; // Known height
+            if (pointer.y > this.uiScene.scale.height - uiHeight) {
+                return true;
+            }
+        }
+
+        // 2. Check Fire Button (Circular)
+        if (this.fireButtonContainer) {
+            // Container is at center of button
+            const dist = Phaser.Math.Distance.Between(pointer.x, pointer.y, this.fireButtonContainer.x, this.fireButtonContainer.y);
+            const radius = 70; // 60 radius + 10 margin
+            if (dist < radius) return true;
+        }
+
+        return false;
     }
 }

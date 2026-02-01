@@ -101,12 +101,53 @@ export class CombatManager {
                            // Scale force by proximity (damage / maxDamage)
                            const intensity = Math.min(1.0, damage / maxDamage);
                            
-                           const baseForce = 2 * turret.getMass(); // Lower base force
-                           const force = (baseForce + pushForce * turret.getMass()) * intensity;
+                           // Calculate vector from explosion to turret
+                           const dx = turret.position.x - x;
+                           const dy = turret.position.y - y;
+                           let dist = Math.sqrt(dx*dx + dy*dy);
                            
-                           const angle = Math.atan2(turret.position.y - y, turret.position.x - x);
-                           const ix = Math.cos(angle) * force;
-                           const iy = Math.sin(angle) * force;
+                           let launchDirX = dx;
+                           let launchDirY = dy;
+                           
+                           // Handle Direct Hits (or very close) by using Planet Normal
+                           // This ensures turrets don't get stuck if hit strictly from "above" or inside
+                           if (dist < 10) { 
+                                // Launch away from planet center (Upwards)
+                                launchDirX = turret.position.x - planet.position.x;
+                                launchDirY = turret.position.y - planet.position.y;
+                                dist = Math.sqrt(launchDirX*launchDirX + launchDirY*launchDirY);
+                           }
+                           
+                           // Normalize
+                           if (dist > 0) {
+                               launchDirX /= dist;
+                               launchDirY /= dist;
+                           } else {
+                               // Fallback
+                               launchDirX = 0;
+                               launchDirY = -1; 
+                           }
+
+                           // INSTANT OP: Nudge turret out of planet surface to prevent sticking
+                           // Move 10 pixels along the launch vector (Increased from 3)
+                           turret.nudge(launchDirX * 10, launchDirY * 10);
+                           turret.lastLaunchTime = Date.now();
+
+                           // PHYSICS TUNING
+                           // Goal: Major airtime. Mass is ~1600.
+                           const mass = turret.getMass();
+
+                           const pushMultiplier = 60.0; // Reduced from 100
+                           const baseLaunch = 600 * mass; // Reduced from 1000
+                           
+                           // Calculate Total Impulse
+                           
+
+                           // Calculate Total Impulse
+                           const totalImpulse = (baseLaunch + pushForce * mass * pushMultiplier) * intensity;
+                           
+                           const ix = launchDirX * totalImpulse;
+                           const iy = launchDirY * totalImpulse;
                            
                            // Impulse = F * dt
                            const dt = 0.016;

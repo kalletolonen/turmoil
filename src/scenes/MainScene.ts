@@ -39,6 +39,7 @@ export class MainScene extends Phaser.Scene {
   private initialized = false;
   private graphics!: Phaser.GameObjects.Graphics;
   private projectiles: Projectile[] = [];
+  private playBounds: Phaser.Geom.Rectangle = new Phaser.Geom.Rectangle(0, 0, GameConfig.MAP_WIDTH, GameConfig.MAP_HEIGHT);
   
   
   public selectedTurret: Turret | null = null;
@@ -95,6 +96,9 @@ export class MainScene extends Phaser.Scene {
     this.fleetRenderer = new FleetRenderer(this); // Pass 'this' as scene
     this.graphics = this.add.graphics();
     this.graphics.setDepth(1000);
+
+    // Draw Play Boundary (Moved to after planet generation)
+    // this.drawPlayBoundary();
     
     // ...
 
@@ -119,12 +123,12 @@ export class MainScene extends Phaser.Scene {
         // Spawn Planets with Overlap Prevention
         // Generate Map
         const mapGen = new MapGenerator();
-        const mapWidth = 2400;
-        const mapHeight = 1800;
+        const mapWidth = GameConfig.MAP_WIDTH;
+        const mapHeight = GameConfig.MAP_HEIGHT;
         
-        // Set Camera Bounds with Buffer
-        const buffer = 500;
-        this.cameras.main.setBounds(-buffer, -buffer, mapWidth + 2 * buffer, mapHeight + 2 * buffer);
+        // Set Camera Bounds with Buffer (Will be updated in calculatePlayBounds)
+        // const buffer = 500;
+        // this.cameras.main.setBounds(-buffer, -buffer, mapWidth + 2 * buffer, mapHeight + 2 * buffer);
         
         const mapData = mapGen.generate({
             width: mapWidth,
@@ -155,6 +159,13 @@ export class MainScene extends Phaser.Scene {
         //     this.debris.push(new Debris(this, x, y, radius));
         // }
     }
+
+    // Calculate Dynamic Play Bounds
+    this.calculatePlayBounds();
+    
+    // Redraw Boundary
+    this.graphics.clear();
+    this.drawPlayBoundary();
 
 
     this.turnManager.onPhaseChange = (phase) => {
@@ -205,9 +216,9 @@ export class MainScene extends Phaser.Scene {
         }
     };
     
-    // UI Text
-    this.add.text(10, 10, 'Press SPACE to Execute Turn', { fontSize: '16px', color: '#ffffff' }).setScrollFactor(0);
-    this.data.set('phaseText', this.add.text(10, 30, 'Phase: PLANNING', { fontSize: '16px', color: '#00ff00' }).setScrollFactor(0));
+    // UI Text removed by user request
+    // this.add.text(10, 10, 'Press SPACE to Execute Turn', { fontSize: '16px', color: '#ffffff' }).setScrollFactor(0);
+    // this.data.set('phaseText', this.add.text(10, 30, 'Phase: PLANNING', { fontSize: '16px', color: '#00ff00' }).setScrollFactor(0));
 
      // Trigger initial state if we missed the event
      if (this.turnManager.currentPhase === TurnPhase.PLANNING) {
@@ -243,6 +254,23 @@ export class MainScene extends Phaser.Scene {
      });
 
      this.trajectorySystem = new TrajectorySystem(this);
+     
+     // Bind Busy Check
+     this.turnManager.checkBusy = () => {
+         // 1. Are projectiles flying?
+         if (this.projectiles.length > 0) return true;
+         
+         // 2. Are turrets falling?
+         let fallingCount = 0;
+         this.planets.forEach(p => {
+             p.turretsList.forEach(t => {
+                 if (t.isFalling) fallingCount++;
+             });
+         });
+         
+         return fallingCount > 0;
+     };
+
      this.initialized = true;
   }
 
@@ -267,32 +295,42 @@ export class MainScene extends Phaser.Scene {
             fallingTurrets.forEach(t => t.update());
         }
 
-        this.rapierManager.step();
+        // Check Play Area Bounds
+        this.checkPlayBounds();
+    }
+    
+    // Check Victory
+    this.checkVictoryCondition();
+
+    if (shouldStep) {
+        this.rapierManager.step(); 
         this.projectiles.forEach(p => p.update(this.planets, this.projectiles));
+
+        // Projectiles now handle their own gravity internally
+        
+        // Apply gravity to falling turrets
+        const fallingTurrets: Turret[] = [];
+        this.planets.forEach(p => {
+             p.turretsList.forEach(t => {
+                 if (t.isFalling) fallingTurrets.push(t);
+             });
+        });
+        if (fallingTurrets.length > 0) {
+            GravitySystem.applyGravity(fallingTurrets, this.planets);
+            fallingTurrets.forEach(t => t.update());
+        }
+
+        // Check Play Area Bounds
+        this.checkPlayBounds();
+        
+        this.collisionManager.update();
+        FXManager.getInstance().update(delta);
     }
 
     if (this.turnManager.currentPhase === TurnPhase.PLANNING) {
         this.uiManager.updateWeaponSelectionUI();
     }
 
-
-    // Update Renderer
-    const bodies = this.rapierManager.getAllBodyData();
-    this.fleetRenderer.update(bodies);
-    
-    // Update Debris visuals
-    this.debris.forEach(d => d.update());
-
-    // Handle Collisions
-    if (shouldStep) { 
-        this.collisionManager.update();
-        FXManager.getInstance().update(delta);
-    }
-    // Actually collision events are queued by Rapier step, so we should check them if we stepped.
-    // However, if we didn't step, could there be events? No.
-    
-    
-    
     // Prediction handling - show during PLANNING and EXECUTION
     if (this.turnManager.currentPhase === TurnPhase.PLANNING || 
         this.turnManager.currentPhase === TurnPhase.EXECUTION) {
@@ -303,11 +341,11 @@ export class MainScene extends Phaser.Scene {
         this.graphics.clear();
     }
     
-    
     // Update Phase Text
     const phaseText = this.data.get('phaseText') as Phaser.GameObjects.Text;
     if (phaseText) {
-        phaseText.setText(`Phase: ${this.turnManager.currentPhase}`);
+        // Phase text removed
+        // phaseText.setText(`Phase: ${this.turnManager.currentPhase}`);
     }
   }
 
@@ -401,5 +439,138 @@ export class MainScene extends Phaser.Scene {
               }
           });
       });
+  }
+  private checkPlayBounds() {
+      const bounds = this.playBounds;
+      
+      this.planets.forEach(p => {
+          for (let i = p.turretsList.length - 1; i >= 0; i--) {
+              const t = p.turretsList[i];
+              // Check bounds
+              if (!bounds.contains(t.position.x, t.position.y)) {
+                  // Visual text
+                  FXManager.getInstance().createFloatingText(t.position.x, t.position.y, "OUT OF BOUNDS!", 0xff0000);
+                  // FX
+                  FXManager.getInstance().createExplosion(t.position.x, t.position.y, 0xffffff, 30);
+                  
+                  t.destroy();
+                  p.turretsList.splice(i, 1);
+              }
+          }
+      });
+  }
+
+  private calculatePlayBounds() {
+      if (this.planets.length === 0) return;
+
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minY = Infinity;
+      let maxY = -Infinity;
+
+      this.planets.forEach(p => {
+          const r = p.radiusValue;
+          if (p.position.x - r < minX) minX = p.position.x - r;
+          if (p.position.x + r > maxX) maxX = p.position.x + r;
+          if (p.position.y - r < minY) minY = p.position.y - r;
+          if (p.position.y + r > maxY) maxY = p.position.y + r;
+      });
+
+      const padding = 500;
+      this.playBounds.setPosition(minX - padding, minY - padding);
+      this.playBounds.setSize(
+          (maxX + padding) - (minX - padding),
+          (maxY + padding) - (minY - padding)
+      );
+      
+      // Update Camera Bounds to match (plus a bit more for shake/ui)
+      this.cameras.main.setBounds(
+          this.playBounds.x - 100, 
+          this.playBounds.y - 100, 
+          this.playBounds.width + 200, 
+          this.playBounds.height + 200
+      );
+      
+      this.cameras.main.centerOn(this.playBounds.centerX, this.playBounds.centerY);
+  }
+
+  private drawPlayBoundary() {
+         const x = this.playBounds.x;
+         const y = this.playBounds.y;
+         const w = this.playBounds.width;
+         const h = this.playBounds.height;
+         
+         const graphics = this.add.graphics();
+         graphics.lineStyle(2, 0xffffff, 0.5); // Thinner, slightly transparent
+         
+         // Helper for dashed line
+         const dashLen = 20;
+         const gapLen = 20;
+         const step = dashLen + gapLen;
+
+         const drawDashedRect = (x: number, y: number, w: number, h: number) => {
+             // Top
+             for (let i = x; i < x + w; i += step) {
+                 graphics.lineBetween(i, y, Math.min(i + dashLen, x + w), y);
+             }
+             // Bottom
+             for (let i = x; i < x + w; i += step) {
+                 graphics.lineBetween(i, y + h, Math.min(i + dashLen, x + w), y + h);
+             }
+             // Left
+             for (let i = y; i < y + h; i += step) {
+                 graphics.lineBetween(x, i, x, Math.min(i + dashLen, y + h));
+             }
+             // Right
+             for (let i = y; i < y + h; i += step) {
+                 graphics.lineBetween(x + w, i, x + w, Math.min(i + dashLen, y + h));
+             }
+         };
+         
+         drawDashedRect(x, y, w, h);
+  }
+
+  private checkVictoryCondition() {
+      if (this.data.get('victoryShown')) return;
+
+      // Count AI turrets (non-red)
+      let aiTurretCount = 0;
+      this.planets.forEach(p => {
+          p.turretsList.forEach(t => {
+               if (t.teamId !== 'red') {
+                   aiTurretCount++;
+               }
+          });
+      });
+
+      // Count Player turrets
+      let playerTurretCount = 0;
+      this.planets.forEach(p => {
+           p.turretsList.forEach(t => {
+               if (t.teamId === 'red') playerTurretCount++;
+           });
+      });
+
+      if (aiTurretCount === 0 && playerTurretCount > 0) {
+          // VICTORY
+          this.data.set('victoryShown', true);
+          const cx = this.scale.width / 2;
+          const cy = this.scale.height / 2;
+          
+          const victoryText = this.add.text(cx, cy, 'VICTORY!', { 
+              fontSize: '96px', 
+              color: '#00ff00', 
+              fontStyle: 'bold',
+              stroke: '#000000',
+              strokeThickness: 8
+          }).setOrigin(0.5).setScrollFactor(0).setDepth(3000);
+          
+          this.tweens.add({
+              targets: victoryText,
+              scale: { from: 0.5, to: 1.2 },
+              duration: 800,
+              ease: 'Bounce.Out'
+          });
+      }
   }
 }
