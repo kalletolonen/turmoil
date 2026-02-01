@@ -12,7 +12,6 @@ export class Projectile extends Phaser.GameObjects.Sprite {
     private velX: number;
     private velY: number;
     private readonly PROJECTILE_RADIUS = 5;
-    private readonly PROJECTILE_RADIUS = 5;
     private readonly PROJECTILE_MASS = 1.0;
     public lifespan: number = 10000; // 10 seconds default
 
