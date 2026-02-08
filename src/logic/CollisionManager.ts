@@ -287,6 +287,13 @@ export class CollisionManager {
       host.updateVisuals();
       
       // Destroy donor
-      donor.destroy();
+      const planets = this.getPlanets();
+      const planet = planets.find(p => p.turretsList.includes(donor));
+      if (planet) {
+          planet.removeTurret(donor);
+      } else {
+          // Fallback if not found in list (shouldn't happen)
+          donor.destroy();
+      }
   }
 }

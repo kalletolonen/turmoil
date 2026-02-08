@@ -163,14 +163,10 @@ export class CombatManager {
       });
 
       toDestroy.forEach(({ turret, planet }) => {
-            const tIndex = planet.turretsList.indexOf(turret);
-            if (tIndex > -1) {
-                planet.turretsList.splice(tIndex, 1);
-                const tx = turret.position.x;
-                const ty = turret.position.y;
-                turret.destroy();
-                this.createExplosion(tx, ty, 0xffaa00, 30);
-            }
+            const tx = turret.position.x;
+            const ty = turret.position.y;
+            planet.removeTurret(turret);
+            this.createExplosion(tx, ty, 0xffaa00, 30);
       });
   }
 

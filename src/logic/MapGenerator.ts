@@ -70,25 +70,12 @@ export class MapGenerator {
 
                 if (!overlap) {
                     // Valid Position
-                     // Determine Team & Properties
-                    const isNaturalNeutral = rng.nextFloat() < 0.3;
-                    let teamId: string | null = null;
-                    let color = 0x888888;
-
-                     if (!isNaturalNeutral) {
-                        if (x < config.width / 2) {
-                            teamId = 'red';
-                        } else {
-                            teamId = 'green';
-                        }
-                    } else {
-                        color = 0x666666;
-                    }
-
+                    // Determine Team & Properties (Initially neutral, assigned later)
                     const seed = rng.nextInt(0, 1000000);
+                    const color = 0x888888; // Default color
 
                     planets.push({
-                        x, y, radius, color, teamId, turretCount: 0, seed
+                        x, y, radius, color, teamId: null, turretCount: 0, seed
                     });
                     placed = true;
                 }
@@ -97,6 +84,42 @@ export class MapGenerator {
             if (!placed) {
                 console.warn(`Could not find space for planet ${i} after ${MAX_ATTEMPTS} attempts`);
             }
+        }
+
+        // 2. Assign Teams (Guaranteed Distribution)
+        // Sort by X coordinate
+        planets.sort((a, b) => a.x - b.x);
+
+        // Ensure at least 1 planet per team
+        // Strategy: First 2 -> Red, Last 2 -> Green, Middle -> Random/Neutral
+        
+        if (planets.length >= 2) {
+             // Leftmost -> Red
+             planets[0].teamId = 'red';
+             // Rightmost -> Green
+             planets[planets.length - 1].teamId = 'green';
+             
+             // If we have more planets, assign more
+             if (planets.length >= 4) {
+                 planets[1].teamId = 'red';
+                 planets[planets.length - 2].teamId = 'green';
+             }
+             
+             // Neutralize the rest or Random
+             // The middle ones remain null (neutral) or can be assigned random props
+             for (let i = 0; i < planets.length; i++) {
+                 const p = planets[i];
+                 if (!p.teamId) {
+                     // Randomly decide if it's a neutral flavored planet
+                     const isNaturalNeutral = rng.nextFloat() < 0.3;
+                     if (isNaturalNeutral) {
+                         p.color = 0x666666;
+                     }
+                 }
+             }
+        } else {
+             // Fallback for very low planet count (< 2 ??)
+             console.warn("Not enough planets for team assignment!");
         }
 
         // Distribute exactly 3 turrets per team

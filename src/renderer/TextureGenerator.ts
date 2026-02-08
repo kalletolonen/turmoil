@@ -66,5 +66,23 @@ export class TextureGenerator {
           g.generateTexture('white_1x1', 1, 1);
           g.destroy();
       }
+
+      // 7. Disabled Stripe Pattern (32x32 transparent with diagonal black lines)
+      if (!scene.textures.exists('disabled_stripe')) {
+          const g = scene.make.graphics({ x: 0, y: 0 });
+          // Background transparent
+          
+          g.lineStyle(2, 0x000000);
+          
+          // Draw diagonal lines
+          // 32x32 box
+          // y = x + offset
+          for (let i = -32; i < 64; i+=8) {
+              g.lineBetween(i, 0, i + 32, 32);
+          }
+          
+          g.generateTexture('disabled_stripe', 32, 32);
+          g.destroy();
+      }
   }
 }

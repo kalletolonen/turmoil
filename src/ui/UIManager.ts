@@ -122,6 +122,13 @@ export class UIManager {
             // "Giga Blaster" is long.
             nameText.setWordWrapWidth(itemWidth - 4);
             
+            // Disabled Overlay
+            const overlay = this.uiScene.add.tileSprite(boxX, boxY, itemWidth, buttonHeight, 'disabled_stripe');
+            overlay.setAlpha(0.3);
+            overlay.setVisible(false);
+            overlay.setName(`overlay_${type}`);
+            this.weaponUIContainer?.add(overlay);
+
             this.weaponUIContainer?.add(nameText);
             this.weaponUIContainer?.add(costText);
         });
@@ -155,6 +162,7 @@ export class UIManager {
                 const isSelected = this.scene.selectedTurret?.projectileType === type;
                 
                 const frame = this.weaponUIContainer?.getByName(`frame_${type}`) as Phaser.GameObjects.Rectangle;
+                const overlay = this.weaponUIContainer?.getByName(`overlay_${type}`) as Phaser.GameObjects.TileSprite;
                 
                 // Highlight selection
                 if (isSelected) {
@@ -185,13 +193,16 @@ export class UIManager {
                      }
                 }
                 
-                button.setAlpha(affordable ? 1 : 0.1); // Darker when disabled
                 if (affordable) {
+                    button.setAlpha(1);
                     button.setInteractive();
+                    button.setTint(0xffffff); // Standard tint (or none)
+                    overlay?.setVisible(false);
                 } else {
+                    button.setAlpha(0.5);
                     button.disableInteractive();
-                    button.setTint(0x550000); // Reddish for disabled
-                    // button.setStrokeStyle(2, 0xff0000); // Red stroke for disabled (unsupported)
+                    button.setTint(0x555555); // Darker
+                    overlay?.setVisible(true);
                 }
             }
         });

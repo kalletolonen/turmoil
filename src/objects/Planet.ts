@@ -343,6 +343,14 @@ export class Planet {
         return this.turrets;
     }
 
+    public removeTurret(turret: Turret) {
+        const index = this.turrets.indexOf(turret);
+        if (index > -1) {
+            this.turrets.splice(index, 1);
+            turret.destroy();
+        }
+    }
+
     addTurretAtAngle(angle: number, teamId: string | null) {
         // Check if there is already a turret nearby
         const MIN_DIST = 25; // Pixel distance buffer for checking existing (approx turret width + buffer)

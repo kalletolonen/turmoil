@@ -153,10 +153,10 @@ export class MainScene extends Phaser.Scene {
         const mapData = mapGen.generate({
             width: mapWidth,
             height: mapHeight,
-            planetCount: 8, // Reduced from 12 to prevent overcrowding
-            minPlanetRadius: 40, // Slightly reduced
-            maxPlanetRadius: 100, // Slightly reduced
-            padding: 50 // Reduced padding to fit planets in 800x600
+            planetCount: 6, // Reduced from 8 to fit
+            minPlanetRadius: 40, 
+            maxPlanetRadius: 100, 
+            padding: 100 // Increased padding to 100
         }, this.rng);
 
         mapData.planets.forEach((pData) => {

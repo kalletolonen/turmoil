@@ -63,4 +63,16 @@ describe('MapGenerator', () => {
         expect(map.planets.length).toBe(1000);
         expect(end - start).toBeLessThan(100); // Should be very fast (<100ms)
     });
+
+    it('should ensure existence of both red and green factions', () => {
+        const rng = new SeededRNG(12345);
+        const mapGen = new MapGenerator();
+        const map = mapGen.generate(defaultConfig, rng);
+
+        const redPlanets = map.planets.filter(p => p.teamId === 'red');
+        const greenPlanets = map.planets.filter(p => p.teamId === 'green');
+
+        expect(redPlanets.length).toBeGreaterThan(0);
+        expect(greenPlanets.length).toBeGreaterThan(0);
+    });
 });
